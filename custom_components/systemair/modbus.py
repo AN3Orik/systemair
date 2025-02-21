@@ -505,6 +505,15 @@ parameters_list = [
         description="Enabling of eco mode",
         boolean=True,
     ),
+    # Free Cooling
+    ModbusParameter(
+        register=4100,
+        sig=IntegerType.UINT,
+        reg_type=RegisterType.Holding,
+        short="REG_FREE_COOLING_ON_OFF",
+        description="Enabling of free cooling",
+        boolean=True,
+    ),
     # Filter replacement
     ModbusParameter(
         register=7005,
@@ -776,6 +785,7 @@ config_parameters = {
     for short in [
         "REG_FILTER_REMAINING_TIME_L",
         "REG_FILTER_REMAINING_TIME_H",
+        "REG_FREE_COOLING_ON_OFF",
         "REG_USERMODE_CROWDED_AIRFLOW_LEVEL_SAF",
         "REG_USERMODE_REFRESH_AIRFLOW_LEVEL_SAF",
         "REG_USERMODE_FIREPLACE_AIRFLOW_LEVEL_SAF",
