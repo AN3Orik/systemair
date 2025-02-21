@@ -10,6 +10,7 @@ ATTRIBUTION = "Data provided by Systemair SAVE Connect."
 MAX_TEMP = 30
 MIN_TEMP = 12
 
+PRESET_MODE_AUTO = "auto"
 PRESET_MODE_MANUAL = "manual"
 PRESET_MODE_CROWDED = "crowded"
 PRESET_MODE_REFRESH = "refresh"
