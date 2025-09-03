@@ -24,6 +24,7 @@ from httpx import DecodingError
 from .const import (
     MAX_TEMP,
     MIN_TEMP,
+    PRESET_MODE_AUTO,
     PRESET_MODE_AWAY,
     PRESET_MODE_CROWDED,
     PRESET_MODE_FIREPLACE,
@@ -36,6 +37,7 @@ from .entity import SystemairEntity
 from .modbus import parameter_map
 
 PRESET_MODE_TO_VALUE_MAP = {
+    PRESET_MODE_AUTO: 1,
     PRESET_MODE_MANUAL: 2,
     PRESET_MODE_CROWDED: 3,
     PRESET_MODE_REFRESH: 4,
@@ -72,6 +74,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     _attr_has_entity_name = True
 
     _attr_preset_modes: ClassVar[list[str]] = [
+        PRESET_MODE_AUTO,
         PRESET_MODE_MANUAL,
         PRESET_MODE_CROWDED,
         PRESET_MODE_REFRESH,
