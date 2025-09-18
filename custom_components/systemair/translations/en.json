@@ -2,7 +2,7 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/tesharp/systemair",
+                "description": "You need enter IAM Module IP Address",
                 "data": {
                     "ip_address": "IP Address"
                 }

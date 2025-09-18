@@ -1,26 +1,15 @@
-"""
-Custom integration to integrate Systemair with Home Assistant.
-
-For more details about this integration, please refer to
-https://github.com/tesharp/systemair-save-connect
-"""
-
+"""Custom integration to integrate Systemair VSR with Home Assistant."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from homeassistant.const import CONF_IP_ADDRESS, Platform
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PORT, Platform
+from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_loaded_integration
 
-from .api import SystemairApiClient
+from .api import SystemairVSRModbusClient
+from .const import CONF_SLAVE_ID, DOMAIN
 from .coordinator import SystemairDataUpdateCoordinator
-from .data import SystemairData
-
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-
-    from .data import SystemairConfigEntry
+from .data import SystemairConfigEntry, SystemairData
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -31,25 +20,22 @@ PLATFORMS: list[Platform] = [
 ]
 
 
-# https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: SystemairConfigEntry,
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) -> bool:
     """Set up this integration using UI."""
-    coordinator = SystemairDataUpdateCoordinator(
-        hass=hass,
-    )
-    entry.runtime_data = SystemairData(
-        client=SystemairApiClient(
-            address=entry.data[CONF_IP_ADDRESS],
-            session=async_get_clientsession(hass),
-        ),
-        integration=async_get_loaded_integration(hass, entry.domain),
-        coordinator=coordinator,
+    client = SystemairVSRModbusClient(
+        host=entry.data[CONF_HOST],
+        port=entry.data[CONF_PORT],
+        slave_id=entry.data[CONF_SLAVE_ID],
     )
 
-    # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
+    coordinator = SystemairDataUpdateCoordinator(hass=hass, client=client)
+
+    entry.runtime_data = SystemairData(
+        client=client,
+        coordinator=coordinator,
+        integration=async_get_loaded_integration(hass, entry.domain),
+    )
+
     await coordinator.async_config_entry_first_refresh()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -58,18 +44,15 @@ async def async_setup_entry(
     return True
 
 
-async def async_unload_entry(
-    hass: HomeAssistant,
-    entry: SystemairConfigEntry,
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
+    client: SystemairVSRModbusClient = entry.runtime_data.client
+    await client.close()
+
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def async_reload_entry(
-    hass: HomeAssistant,
-    entry: SystemairConfigEntry,
-) -> None:
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)

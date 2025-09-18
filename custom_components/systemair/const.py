@@ -1,5 +1,4 @@
 """Constants for Systemair."""
-
 from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
@@ -7,6 +6,12 @@ LOGGER: Logger = getLogger(__package__)
 DOMAIN = "systemair"
 ATTRIBUTION = "Data provided by Systemair SAVE Connect."
 
+# Constants for Modbus configuration
+CONF_SLAVE_ID = "slave_id"
+DEFAULT_PORT = 502
+DEFAULT_SLAVE_ID = 1
+
+# Constants from the old integration
 MAX_TEMP = 30
 MIN_TEMP = 12
 

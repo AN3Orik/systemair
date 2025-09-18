@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .api import SystemairApiClient
+    from .api import SystemairVSRModbusClient
     from .coordinator import SystemairDataUpdateCoordinator
 
 
@@ -20,7 +20,7 @@ type SystemairConfigEntry = ConfigEntry[SystemairData]
 class SystemairData:
     """Data for the Systemair."""
 
-    client: SystemairApiClient
+    client: SystemairVSRModbusClient
     coordinator: SystemairDataUpdateCoordinator
     integration: Integration
 

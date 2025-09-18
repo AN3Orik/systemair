@@ -1,122 +1,114 @@
-"""Systemair Client."""
+"""API Client for Systemair VSR ventilation units using Modbus TCP."""
+import asyncio
+from typing import Any
 
-from __future__ import annotations
-
-import asyncio.exceptions
-import socket
-from typing import TYPE_CHECKING, Any
-
-import aiohttp
-import async_timeout
+from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.exceptions import ModbusException
 
 from .const import LOGGER
-
-if TYPE_CHECKING:
-    from .modbus import ModbusParameter
+from .modbus import parameter_map
 
 
-class SystemairApiClientError(Exception):
-    """Exception to indicate a general API error."""
+class ModbusConnectionError(Exception):
+    """Custom exception for connection errors."""
 
 
-class SystemairApiClientCommunicationError(
-    SystemairApiClientError,
-):
-    """Exception to indicate a communication error."""
+class SystemairVSRModbusClient:
+    """Provides a client for interacting with a Systemair VSR unit via Modbus."""
 
+    def __init__(self, host: str, port: int, slave_id: int, timeout: int = 5):
+        """Initialize the Modbus client."""
+        self._client = AsyncModbusTcpClient(host, port=port, timeout=timeout)
+        self.slave_id = slave_id
+        self._lock = asyncio.Lock()
+        self._is_connected = False
 
-class SystemairApiClient:
-    """Systemair API Client."""
+    async def close(self):
+        """Close the Modbus connection."""
+        if self._is_connected:
+            self._client.close()
+            self._is_connected = False
 
-    def __init__(
-        self,
-        address: str,
-        session: aiohttp.ClientSession,
-    ) -> None:
-        """Systemair API Client."""
-        self._address = address
-        self._session = session
+    async def _ensure_connected(self):
+        """Ensure the client is connected, establishing connection if needed."""
+        if not self._is_connected:
+            self._is_connected = await self._client.connect()
+            if not self._is_connected:
+                raise ModbusConnectionError("Could not connect to VSR unit")
 
-    async def async_test_connection(self) -> Any:
-        """Test connection to API."""
-        return await self._api_wrapper(method="get", url=f"http://{self._address}/mread?{{}}")
-
-    async def async_get_endpoint(self, endpoint: str) -> Any:
-        """Get information from the API."""
-        return await self._api_wrapper(method="get", url=f"http://{self._address}/{endpoint}")
-
-    async def async_get_data(self, reg: list[ModbusParameter]) -> Any:
-        """Read modbus registers."""
-        query_params = ",".join(f"%22{item.register - 1}%22:1" for item in reg)
-        url = f"http://{self._address}/mread?{{{query_params}}}"
-        LOGGER.debug("URL: %s", url)
-        return await self._api_wrapper(method="get", url=url)
-
-    async def async_set_data(self, registry: ModbusParameter, value: int) -> Any:
-        """Write data to the API."""
-        query_params = f"%22{registry.register - 1}%22:{value}"
-        url = f"http://{self._address}/mwrite?{{{query_params}}}"
-        LOGGER.debug("URL: %s", url)
-        return await self._api_wrapper(method="get", url=url)
-
-    async def _parse_response(self, response: aiohttp.ClientResponse, *, retry: bool) -> Any:
-        """Parse the response."""
-        response_body = await response.text()
-        if "MB DISCONNECTED" in response_body:
-            LOGGER.debug("Received 'MB DISCONNECTED', retrying...")
-
-            if not retry:
-                msg = "MB DISCONNECTED"
-                raise SystemairApiClientCommunicationError(
-                    msg,
+    async def test_connection(self) -> bool:
+        """Test the connection to the Modbus device."""
+        async with self._lock:
+            try:
+                await self._ensure_connected()
+                test_register_1based = parameter_map["REG_TC_SP"].register
+                await self._client.read_holding_registers(
+                    address=test_register_1based - 1, count=1, device_id=self.slave_id
                 )
+                return True
+            except (ModbusException, ModbusConnectionError) as e:
+                LOGGER.error("Failed to connect during test: %s", e)
+                return False
+            finally:
+                await self.close()
 
-            await asyncio.sleep(1)
-            return None
-        if "OK" in response_body:
-            return response_body
-        return await response.json()
-
-    async def _api_wrapper(
-        self,
-        method: str,
-        url: str,
-        data: dict | None = None,
-        headers: dict | None = None,
-    ) -> Any:
-        """Get information from the API."""
-        retries = 3
-        try:
-            for attempt in range(retries):
-                async with async_timeout.timeout(10):
-                    response = await self._session.request(
-                        method=method,
-                        url=url,
-                        headers=headers,
-                        json=data,
+    async def write_register(self, address_1based: int, value: int):
+        """Write a single holding register. Expects a 1-based address."""
+        async with self._lock:
+            try:
+                await self._ensure_connected()
+                result = await self._client.write_register(
+                    address=address_1based - 1, value=value, device_id=self.slave_id
+                )
+                if result.isError():
+                    raise ModbusConnectionError(
+                        f"Error writing to register {address_1based}: {result}"
                     )
-                    response = await self._parse_response(response, retry=attempt < retries - 1)
-                    if response is None:
-                        continue
-                    return response
+                LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
+            except (ModbusException, ModbusConnectionError) as e:
+                LOGGER.error("Modbus write error: %s", e)
+                await self.close()
+                raise
 
-        except TimeoutError as exception:
-            msg = f"Timeout error fetching information - {exception}"
-            raise SystemairApiClientCommunicationError(
-                msg,
-            ) from exception
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            msg = f"Error fetching information - {exception}"
-            raise SystemairApiClientCommunicationError(
-                msg,
-            ) from exception
-        except SystemairApiClientCommunicationError as exception:
-            msg = f"Received mb disconnect - {exception}"
-            raise SystemairApiClientError(
-                msg,
-            ) from exception
-        except Exception as exception:  # pylint: disable=broad-except
-            msg = f"Something really wrong happened! - {exception}"
-            raise SystemairApiClientError(
-                msg,
-            ) from exception
+    async def get_all_data(self) -> dict[str, Any]:
+        """Read all required registers using block reads with retry logic for stability."""
+        read_blocks = [
+            (1001, 62), (1101, 80), (2001, 50), (2505, 1), (3002, 116),
+            (4100, 1), (7005, 2), (12102, 40), (12306, 12), (12401, 2),
+            (12544, 1), (14001, 4), (14101, 5), (14201, 2), (14381, 1),
+            (15016, 125), (15141, 125), (15266, 125), (15391, 125),
+            (15516, 125), (15641, 125), (15766, 125), (15891, 13),
+        ]
+
+        all_registers = {}
+        max_retries = 3
+        retry_delay = 0.25
+
+        async with self._lock:
+            try:
+                await self._ensure_connected()
+                for start_addr_1based, count in read_blocks:
+                    for attempt in range(max_retries):
+                        result = await self._client.read_holding_registers(
+                            address=start_addr_1based - 1, count=count, device_id=self.slave_id
+                        )
+                        if result.isError():
+                            if result.exception_code == 6 and attempt < max_retries - 1:
+                                LOGGER.debug(f"Device busy on block starting at {start_addr_1based}, retrying...")
+                                await asyncio.sleep(retry_delay)
+                                continue
+                            raise ModbusConnectionError(f"Block {start_addr_1based} read error: {result}")
+
+                        for i, reg_val in enumerate(result.registers):
+                            key = str(start_addr_1based - 1 + i)
+                            all_registers[key] = reg_val
+                        break
+                    else:
+                        raise ModbusConnectionError(f"Failed to read block {start_addr_1based} after retries.")
+                    await asyncio.sleep(0.05)
+            except (ModbusException, ModbusConnectionError) as e:
+                LOGGER.error("Modbus read error during full update: %s", e)
+                await self.close()
+                raise
+
+        return all_registers
