@@ -45,7 +45,7 @@ PRESET_MODE_TO_VALUE_MAP = {
     PRESET_MODE_HOLIDAY: 7,
 }
 
-VALUE_TO_PRESET_MODE_MAP = {value: key for key, value in PRESET_MODE_TO_VALUE_MAP.items()}
+VALUE_TO_PRESET_MODE_MAP = {value - 1: key for key, value in PRESET_MODE_TO_VALUE_MAP.items()}
 
 FAN_MODE_TO_VALUE_MAP = {
     FAN_LOW: 2,
