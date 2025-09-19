@@ -43,6 +43,7 @@ PRESET_MODE_TO_VALUE_MAP = {
     PRESET_MODE_FIREPLACE: 5,
     PRESET_MODE_AWAY: 6,
     PRESET_MODE_HOLIDAY: 7,
+    PRESET_MODE_COOKER_HOOD: 8,
 }
 
 VALUE_TO_PRESET_MODE_MAP = {value: key for key, value in PRESET_MODE_TO_VALUE_MAP.items()}
@@ -81,6 +82,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         PRESET_MODE_FIREPLACE,
         PRESET_MODE_AWAY,
         PRESET_MODE_HOLIDAY,
+        PRESET_MODE_COOKER_HOOD,
     ]
 
     _attr_fan_modes: ClassVar[list[str]] = [
