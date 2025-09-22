@@ -3,6 +3,7 @@
   "name": "Systemair",
   "codeowners": [
     "@AN3Orik",
+    "@bstenborg",
     "@tesharp"
   ],
   "config_flow": true,
