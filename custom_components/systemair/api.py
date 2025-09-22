@@ -1,11 +1,9 @@
 """API Client for Systemair VSR ventilation units using Modbus TCP."""
-
 import asyncio
 from typing import Any
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
-from pymodbus.pdu import ModbusResponse
 
 from .const import LOGGER
 from .modbus import parameter_map
@@ -27,7 +25,7 @@ class SystemairVSRModbusClient:
         self._lock = asyncio.Lock()
         self._is_connected = False
 
-    def _raise_if_response_error(self, result: ModbusResponse, context: str) -> None:
+    def _raise_if_response_error(self, result: Any, context: str) -> None:
         """Raise a connection error if the Modbus result is an error."""
         if result.isError():
             msg = f"{context}: {result}"
