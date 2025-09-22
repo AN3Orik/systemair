@@ -30,7 +30,9 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
 
 ### HACS
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AN3Orik&repository=systemair&category=integration)
+1. Open HACS and go to "Custom integrations". Enter the URL `https://github.com/AN3Orik/systemair`, choose type Integration and click Add. 
+2. Restart Home Assistant
+3. Go to settings and add new integration. You will find Systemair in the list of available integrations. 
 
 ### Manual
 
