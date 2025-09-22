@@ -1,6 +1,10 @@
-# Systemair
+# SystemAir Modbus Integration for Home Assistant
 
-Integration to integrate with SystemAir VSR IAM module via ModBus
+[![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/releases)
+[![GitHub License](https://img.shields.io/github/license/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/blob/main/LICENSE)
+
+Integration to integrate with SystemAir VSR IAM module via ModBus (tested with VSR300 and VSR500 ventilation units)
 
 ## Installation
 
