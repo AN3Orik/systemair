@@ -1,7 +1,7 @@
 """Systemair integration."""
 
 import asyncio.exceptions
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -67,8 +67,6 @@ async def async_setup_entry(
 
 class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     """Systemair air handling unit."""
-
-    from typing import ClassVar
 
     _attr_has_entity_name = True
     _enable_turn_on_off_backwards_compatibility = False
@@ -144,7 +142,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         else:
             await self.async_turn_on()
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
+    async def async_turn_on(self, **_kwargs: Any) -> None:
         """Turn the entity on."""
         try:
             await self.coordinator.set_modbus_data(
@@ -155,7 +153,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         finally:
             await self.coordinator.async_refresh()
 
-    async def async_turn_off(self, **kwargs: Any) -> None:
+    async def async_turn_off(self, **_kwargs: Any) -> None:
         """Turn the entity off."""
         try:
             await self.coordinator.set_modbus_data(
@@ -204,7 +202,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
 
         try:
             await self.coordinator.set_modbus_data(parameter_map["REG_TC_SP"], temperature)
-        except (asyncio.exceptions.TimeoutError, ConnectionError, DecodingError) as exc:
+        except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
             await self.coordinator.async_refresh()
@@ -223,7 +221,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
 
         try:
             await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"], ventilation_mode)
-        except (asyncio.exceptions.TimeoutError, ConnectionError, DecodingError) as exc:
+        except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
             await asyncio.sleep(2)

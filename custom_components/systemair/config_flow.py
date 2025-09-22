@@ -1,6 +1,8 @@
 """Config flow for Systemair VSR integration."""
 from __future__ import annotations
 
+import asyncio
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -28,14 +30,15 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     slave_id=user_input[CONF_SLAVE_ID],
                 )
                 if not await client.test_connection():
-                    raise ModbusConnectionError("Failed to connect")
+                    msg = "Failed to connect"
+                    raise ModbusConnectionError(msg)
 
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit: %s", e)
                 errors["base"] = "cannot_connect"
-            except Exception as e:
+            except (asyncio.TimeoutError, OSError) as e:
                 LOGGER.exception("Unexpected exception: %s", e)
-                errors["base"] = "unknown"
+                errors["base"] = "cannot_connect"
             else:
                 unique_id = f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
                 await self.async_set_unique_id(unique_id)

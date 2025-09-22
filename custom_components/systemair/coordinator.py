@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import ModbusConnectionError, SystemairVSRModbusClient
 from .const import DOMAIN, LOGGER
-from .modbus import IntegerType, parameter_map
+from .modbus import IntegerType
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -86,7 +86,8 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.client.write_register(register.register, value_to_write)
             await self.async_request_refresh()
         except ModbusConnectionError as exc:
-            raise UpdateFailed(f"Failed to write to register {register.register}: {exc}") from exc
+            msg = f"Failed to write to register {register.register}: {exc}"
+            raise UpdateFailed(msg) from exc
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""

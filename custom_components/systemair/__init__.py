@@ -1,15 +1,20 @@
 """Custom integration to integrate Systemair VSR with Home Assistant."""
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
+from typing import TYPE_CHECKING
+
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_loaded_integration
 
 from .api import SystemairVSRModbusClient
-from .const import CONF_SLAVE_ID, DOMAIN
+from .const import CONF_SLAVE_ID
 from .coordinator import SystemairDataUpdateCoordinator
 from .data import SystemairConfigEntry, SystemairData
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -33,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
     entry.runtime_data = SystemairData(
         client=client,
         coordinator=coordinator,
-        integration=async_get_loaded_integration(hass, entry.domain),
+        integration=await async_get_loaded_integration(hass, entry.domain),
     )
 
     await coordinator.async_config_entry_first_refresh()
