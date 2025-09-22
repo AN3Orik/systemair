@@ -1,6 +1,6 @@
 {
     "name": "Systemair",
     "hide_default_branch": true,
-    "homeassistant": "2025.9.3",
+    "homeassistant": "2025.9.4",
     "render_readme": true
 }
