@@ -4,6 +4,7 @@ from typing import Any
 
 from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ModbusException
+from pymodbus.pdu import ModbusResponse
 
 from .const import LOGGER
 from .modbus import parameter_map
@@ -24,6 +25,17 @@ class SystemairVSRModbusClient:
         self.slave_id = slave_id
         self._lock = asyncio.Lock()
         self._is_connected = False
+
+    def _raise_if_response_error(self, result: ModbusResponse, context: str) -> None:
+        """Raise a connection error if the Modbus result is an error."""
+        if result.isError():
+            msg = f"{context}: {result}"
+            raise ModbusConnectionError(msg)
+
+    def _raise_for_retries_failed(self, context: str) -> None:
+        """Raise a connection error when retries have failed."""
+        msg = f"{context} after retries."
+        raise ModbusConnectionError(msg)
 
     async def close(self) -> None:
         """Close the Modbus connection."""
@@ -64,9 +76,9 @@ class SystemairVSRModbusClient:
                 result = await self._client.write_register(
                     address=address_1based - 1, value=value, device_id=self.slave_id
                 )
-                if result.isError():
-                    msg = f"Error writing to register {address_1based}: {result}"
-                    raise ModbusConnectionError(msg)
+                self._raise_if_response_error(
+                    result, f"Error writing to register {address_1based}"
+                )
                 LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
             except (ModbusException, ModbusConnectionError) as e:
                 LOGGER.error("Modbus write error: %s", e)
@@ -100,16 +112,18 @@ class SystemairVSRModbusClient:
                                 LOGGER.debug(f"Device busy on block starting at {start_addr_1based}, retrying...")
                                 await asyncio.sleep(retry_delay)
                                 continue
-                            msg = f"Block {start_addr_1based} read error: {result}"
-                            raise ModbusConnectionError(msg)
+                            self._raise_if_response_error(
+                                result, f"Block {start_addr_1based} read error"
+                            )
 
                         for i, reg_val in enumerate(result.registers):
                             key = str(start_addr_1based - 1 + i)
                             all_registers[key] = reg_val
                         break
                     else:
-                        msg = f"Failed to read block {start_addr_1based} after retries."
-                        raise ModbusConnectionError(msg)
+                        self._raise_for_retries_failed(
+                            f"Failed to read block {start_addr_1based}"
+                        )
                     await asyncio.sleep(0.05)
             except (ModbusException, ModbusConnectionError) as e:
                 LOGGER.error("Modbus read error during full update: %s", e)

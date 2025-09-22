@@ -1,8 +1,6 @@
 """Config flow for Systemair VSR integration."""
 from __future__ import annotations
 
-import asyncio
-
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -17,6 +15,17 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    async def _validate_connection(self, user_input: dict) -> None:
+        """Validate the connection to the VSR unit."""
+        client = SystemairVSRModbusClient(
+            host=user_input[CONF_HOST],
+            port=user_input[CONF_PORT],
+            slave_id=user_input[CONF_SLAVE_ID],
+        )
+        if not await client.test_connection():
+            msg = "Failed to connect"
+            raise ModbusConnectionError(msg)
+
     async def async_step_user(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -24,19 +33,11 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                client = SystemairVSRModbusClient(
-                    host=user_input[CONF_HOST],
-                    port=user_input[CONF_PORT],
-                    slave_id=user_input[CONF_SLAVE_ID],
-                )
-                if not await client.test_connection():
-                    msg = "Failed to connect"
-                    raise ModbusConnectionError(msg)
-
+                await self._validate_connection(user_input)
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit: %s", e)
                 errors["base"] = "cannot_connect"
-            except (asyncio.TimeoutError, OSError) as e:
+            except (TimeoutError, OSError) as e:
                 LOGGER.exception("Unexpected exception: %s", e)
                 errors["base"] = "cannot_connect"
             else:
