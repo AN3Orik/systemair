@@ -1,4 +1,5 @@
 """Config flow for Systemair VSR integration."""
+
 from __future__ import annotations
 
 import voluptuous as vol
@@ -26,9 +27,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             msg = "Failed to connect"
             raise ModbusConnectionError(msg)
 
-    async def async_step_user(
-        self, user_input: dict | None = None
-    ) -> config_entries.ConfigFlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -45,9 +44,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
-                return self.async_create_entry(
-                    title=user_input[CONF_HOST], data=user_input
-                )
+                return self.async_create_entry(title=user_input[CONF_HOST], data=user_input)
 
         return self.async_show_form(
             step_id="user",
@@ -55,9 +52,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST): selector.TextSelector(),
                     vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
-                    vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(
-                        int
-                    ),
+                    vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
                 }
             ),
             errors=errors,

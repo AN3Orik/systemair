@@ -1,4 +1,5 @@
 """Constants for Systemair."""
+
 from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)

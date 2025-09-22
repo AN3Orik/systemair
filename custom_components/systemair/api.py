@@ -1,4 +1,5 @@
 """API Client for Systemair VSR ventilation units using Modbus TCP."""
+
 import asyncio
 from typing import Any
 
@@ -76,9 +77,7 @@ class SystemairVSRModbusClient:
                 result = await self._client.write_register(
                     address=address_1based - 1, value=value, device_id=self.slave_id
                 )
-                self._raise_if_response_error(
-                    result, f"Error writing to register {address_1based}"
-                )
+                self._raise_if_response_error(result, f"Error writing to register {address_1based}")
                 LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
             except (ModbusException, ModbusConnectionError) as e:
                 LOGGER.error("Modbus write error: %s", e)
@@ -88,11 +87,29 @@ class SystemairVSRModbusClient:
     async def get_all_data(self) -> dict[str, Any]:
         """Read all required registers using block reads with retry logic for stability."""
         read_blocks = [
-            (1001, 62), (1101, 80), (2001, 50), (2505, 1), (3002, 116),
-            (4100, 1), (7005, 2), (12102, 40), (12306, 12), (12401, 2),
-            (12544, 1), (14001, 4), (14101, 5), (14201, 2), (14381, 1),
-            (15016, 125), (15141, 125), (15266, 125), (15391, 125),
-            (15516, 125), (15641, 125), (15766, 125), (15891, 13),
+            (1001, 62),
+            (1101, 80),
+            (2001, 50),
+            (2505, 1),
+            (3002, 116),
+            (4100, 1),
+            (7005, 2),
+            (12102, 40),
+            (12306, 12),
+            (12401, 2),
+            (12544, 1),
+            (14001, 4),
+            (14101, 5),
+            (14201, 2),
+            (14381, 1),
+            (15016, 125),
+            (15141, 125),
+            (15266, 125),
+            (15391, 125),
+            (15516, 125),
+            (15641, 125),
+            (15766, 125),
+            (15891, 13),
         ]
 
         all_registers = {}
@@ -112,18 +129,14 @@ class SystemairVSRModbusClient:
                                 LOGGER.debug(f"Device busy on block starting at {start_addr_1based}, retrying...")
                                 await asyncio.sleep(retry_delay)
                                 continue
-                            self._raise_if_response_error(
-                                result, f"Block {start_addr_1based} read error"
-                            )
+                            self._raise_if_response_error(result, f"Block {start_addr_1based} read error")
 
                         for i, reg_val in enumerate(result.registers):
                             key = str(start_addr_1based - 1 + i)
                             all_registers[key] = reg_val
                         break
                     else:
-                        self._raise_for_retries_failed(
-                            f"Failed to read block {start_addr_1based}"
-                        )
+                        self._raise_for_retries_failed(f"Failed to read block {start_addr_1based}")
                     await asyncio.sleep(0.05)
             except (ModbusException, ModbusConnectionError) as e:
                 LOGGER.error("Modbus read error during full update: %s", e)

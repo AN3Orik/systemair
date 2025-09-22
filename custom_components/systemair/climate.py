@@ -145,9 +145,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     async def async_turn_on(self, **_kwargs: Any) -> None:
         """Turn the entity on."""
         try:
-            await self.coordinator.set_modbus_data(
-                parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], 2
-            )
+            await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], 2)
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
@@ -156,9 +154,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     async def async_turn_off(self, **_kwargs: Any) -> None:
         """Turn the entity off."""
         try:
-            await self.coordinator.set_modbus_data(
-                parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], 0
-            )
+            await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], 0)
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
