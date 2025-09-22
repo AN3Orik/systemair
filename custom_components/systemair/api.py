@@ -1,4 +1,5 @@
 """API Client for Systemair VSR ventilation units using Modbus TCP."""
+
 import asyncio
 from typing import Any
 
@@ -56,9 +57,7 @@ class SystemairVSRModbusClient:
             try:
                 await self._ensure_connected()
                 test_register_1based = parameter_map["REG_TC_SP"].register
-                await self._client.read_holding_registers(
-                    address=test_register_1based - 1, count=1, device_id=self.slave_id
-                )
+                await self._client.read_holding_registers(address=test_register_1based - 1, count=1, device_id=self.slave_id)
             except (ModbusException, ModbusConnectionError) as e:
                 LOGGER.error("Failed to connect during test: %s", e)
                 return False
@@ -72,9 +71,7 @@ class SystemairVSRModbusClient:
         async with self._lock:
             try:
                 await self._ensure_connected()
-                result = await self._client.write_register(
-                    address=address_1based - 1, value=value, device_id=self.slave_id
-                )
+                result = await self._client.write_register(address=address_1based - 1, value=value, device_id=self.slave_id)
                 self._raise_if_response_error(result, f"Error writing to register {address_1based}")
                 LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
             except (ModbusException, ModbusConnectionError) as e:

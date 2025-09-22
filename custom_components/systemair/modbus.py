@@ -486,8 +486,7 @@ parameters_list = [
         reg_type=RegisterType.Holding,
         short="REG_USERMODE_HMI_CHANGE_REQUEST",
         description=(
-            "New desired user mode as requested by HMI\n1: Auto\n2: Manual\n3: Crowded\n4: Refresh\n"
-            "5: Fireplace\n6: Away\n7: Holiday"
+            "New desired user mode as requested by HMI\n1: Auto\n2: Manual\n3: Crowded\n4: Refresh\n5: Fireplace\n6: Away\n7: Holiday"
         ),
         min_value=1,
         max_value=7,
@@ -561,8 +560,7 @@ parameters_list = [
         reg_type=RegisterType.Holding,
         short="REG_PRESSURE_GUARD_AIRFLOW_LEVEL_SAF",
         description=(
-            "Fan speed level for configurable pressure guard function.\n0: Off\n1: Minimum\n2: Low\n3: Normal\n"
-            "4: High\n5: Maximum"
+            "Fan speed level for configurable pressure guard function.\n0: Off\n1: Minimum\n2: Low\n3: Normal\n4: High\n5: Maximum"
         ),
         min_value=0,
         max_value=5,
@@ -573,8 +571,7 @@ parameters_list = [
         reg_type=RegisterType.Holding,
         short="REG_PRESSURE_GUARD_AIRFLOW_LEVEL_EAF",
         description=(
-            "Fan speed level for configurable pressure guard function.\n0: Off\n1: Minimum\n2: Low\n"
-            "3: Normal\n4: High\n5: Maximum"
+            "Fan speed level for configurable pressure guard function.\n0: Off\n1: Minimum\n2: Low\n3: Normal\n4: High\n5: Maximum"
         ),
         min_value=0,
         max_value=5,
