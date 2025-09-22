@@ -1,6 +1,6 @@
 # Systemair
 
-_Integration to integrate with SystemAir VSR IAM module via ModBus
+Integration to integrate with SystemAir VSR IAM module via ModBus
 
 ## Installation
 
