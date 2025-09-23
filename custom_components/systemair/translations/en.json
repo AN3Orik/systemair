@@ -95,6 +95,9 @@
         "switch": {
             "eco_mode": {
                 "name": "Eco mode"
+            },
+            "free_cooling": {
+                "name": "Free Cooling"
             }
         }
     }
