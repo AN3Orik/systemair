@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.const import EntityCategory
 
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, parameter_map
@@ -37,6 +39,13 @@ ENTITY_DESCRIPTIONS = (
         translation_key="free_cooling",
         icon="mdi:snowflake",
         registry=parameter_map["REG_FREE_COOLING_ON_OFF"],
+    ),
+    SystemairSwitchEntityDescription(
+        key="manual_fan_stop_allowed",
+        translation_key="manual_fan_stop_allowed",
+        icon="mdi:fan-off",
+        registry=parameter_map["REG_FAN_MANUAL_STOP_ALLOWED"],
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -78,12 +87,16 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
         """Return true if the switch is on."""
         return self.coordinator.get_modbus_data(self.entity_description.registry) != 0
 
+    async def _async_set_state(self, value: bool) -> None:
+        """Turn on or off the switch."""
+        await self.coordinator.set_modbus_data(self.entity_description.registry, value=value)
+        await asyncio.sleep(1)
+        await self.coordinator.async_request_refresh()
+
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self.coordinator.set_modbus_data(self.entity_description.registry, value=True)
-        await self.coordinator.async_request_refresh()
+        await self._async_set_state(True)
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self.coordinator.set_modbus_data(self.entity_description.registry, value=False)
-        await self.coordinator.async_request_refresh()
+        await self._async_set_state(False)

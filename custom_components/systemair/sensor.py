@@ -31,6 +31,16 @@ ALARM_STATE_TO_VALUE_MAP = {
 
 VALUE_MAP_TO_ALARM_STATE = {value: key for key, value in ALARM_STATE_TO_VALUE_MAP.items()}
 
+IAQ_LEVEL_MAP = {0: "Perfect", 1: "Good", 2: "Improving"}
+DEMAND_CONTROLLER_MAP = {0: "CO2", 1: "RH"}
+DEFROSTING_STATE_MAP = {
+    0: "Normal",
+    1: "Bypass",
+    2: "Stop",
+    3: "Secondary air",
+    4: "Error",
+}
+
 
 @dataclass(kw_only=True, frozen=True)
 class SystemairSensorEntityDescription(SensorEntityDescription):
@@ -119,6 +129,32 @@ ENTITY_DESCRIPTIONS = (
         registry=parameter_map["REG_FILTER_REMAINING_TIME_L"],
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    SystemairSensorEntityDescription(
+        key="iaq_level",
+        translation_key="iaq_level",
+        icon="mdi:air-filter",
+        device_class=SensorDeviceClass.ENUM,
+        options=["Perfect", "Good", "Improving"],
+        registry=parameter_map["REG_IAQ_LEVEL"],
+    ),
+    SystemairSensorEntityDescription(
+        key="demand_active_controller",
+        translation_key="demand_active_controller",
+        icon="mdi:tune-variant",
+        device_class=SensorDeviceClass.ENUM,
+        options=["CO2", "RH"],
+        registry=parameter_map["REG_DEMC_ACTIVE_CONTROLLER"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SystemairSensorEntityDescription(
+        key="defrosting_state",
+        translation_key="defrosting_state",
+        icon="mdi:snowflake-alert",
+        device_class=SensorDeviceClass.ENUM,
+        options=["Normal", "Bypass", "Stop", "Secondary air", "Error"],
+        registry=parameter_map["REG_DEFROSTING_STATE"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     *(
         SystemairSensorEntityDescription(
             key=f"alarm_{param.short.lower()}",
@@ -169,9 +205,17 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
         value = self.coordinator.get_modbus_data(self.entity_description.registry)
+        value = int(value)
+
+        key = self.entity_description.key
+        if key == "iaq_level":
+            return IAQ_LEVEL_MAP.get(value)
+        if key == "demand_active_controller":
+            return DEMAND_CONTROLLER_MAP.get(value)
+        if key == "defrosting_state":
+            return DEFROSTING_STATE_MAP.get(value)
 
         if self.device_class == SensorDeviceClass.ENUM:
-            value = int(value)
             return VALUE_MAP_TO_ALARM_STATE.get(value, "Inactive")
 
         return str(value)

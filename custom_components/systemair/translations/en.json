@@ -72,7 +72,7 @@
             },
             "extract_air_relative_humidity": {
                 "name": "Extract air relative humidity"
-            },  
+            },
             "meter_saf_rpm": {
                 "name": "Supply air fan RPM"
             },
@@ -90,6 +90,15 @@
             },
             "filter_remaining_time": {
                 "name": "Filter remaining time"
+            },
+            "iaq_level": {
+                "name": "Indoor Air Quality"
+            },
+            "demand_active_controller": {
+                "name": "Demand Active Controller"
+            },
+            "defrosting_state": {
+                "name": "Defrosting State"
             }
         },
         "switch": {
@@ -98,6 +107,37 @@
             },
             "free_cooling": {
                 "name": "Free Cooling"
+            },
+            "manual_fan_stop_allowed": {
+                "name": "Allow manual fan stop"
+            }
+        },
+        "select": {
+            "temperature_control_mode": {
+                "name": "Temperature Control Mode",
+                "state": {
+                    "supply_air": "Supply air",
+                    "room_air": "Room air",
+                    "extract_air": "Extract air"
+                }
+            },
+            "fan_regulation_unit": {
+                "name": "Fan Regulation Unit",
+                "state": {
+                    "manual_percent": "Manual, %",
+                    "manual_rpm": "Manual, RPM",
+                    "pressure": "Pressure",
+                    "flow": "Flow",
+                    "external": "External"
+                }
+            },
+            "defrosting_mode": {
+                "name": "Defrosting Mode",
+                "state": {
+                    "soft": "Soft",
+                    "normal": "Normal",
+                    "hard": "Hard"
+                }
             }
         }
     }
