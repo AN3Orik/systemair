@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
     entry.runtime_data = SystemairData(
         client=client,
         coordinator=coordinator,
-        integration=await async_get_loaded_integration(hass, entry.domain),
+        integration=async_get_loaded_integration(hass, entry.domain),
     )
 
     await coordinator.async_config_entry_first_refresh()
