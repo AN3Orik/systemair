@@ -223,7 +223,6 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     """Systemair Sensor class."""
 
     _attr_has_entity_name = True
-
     entity_description: SystemairSensorEntityDescription
 
     def __init__(
@@ -280,6 +279,16 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         if not specs:
             return None
 
+        # Get fan counts from specs, defaulting to 0 if not present
+        num_supply_fans = specs.get("supply_fans", 0)
+        num_extract_fans = specs.get("extract_fans", 0)
+        total_fans = num_supply_fans + num_extract_fans
+
+        # Calculate power per fan
+        power_per_fan = 0
+        if total_fans > 0:
+            power_per_fan = specs.get("fan_power", 0) / total_fans
+
         # Get current fan speeds and heater status
         supply_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
         extract_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
@@ -288,13 +297,12 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         if supply_fan_pct is None or extract_fan_pct is None or heater_on is None:
             return None
 
-        # Assume max fan power is split 50/50 between supply and extract fans
-        max_fan_power_per_fan = specs["fan_power"] / 2
+        # Calculate power for each component
+        supply_power = (supply_fan_pct / 100) * power_per_fan * num_supply_fans
+        extract_power = (extract_fan_pct / 100) * power_per_fan * num_extract_fans
+        heater_power = specs.get("heater_power", 0) if heater_on else 0
 
-        supply_power = (supply_fan_pct / 100) * max_fan_power_per_fan
-        extract_power = (extract_fan_pct / 100) * max_fan_power_per_fan
-        heater_power = specs["heater_power"] if heater_on else 0
-
+        # Return the correct value based on the sensor's key
         key = self.entity_description.key
         if key == "supply_fan_power":
             return round(supply_power, 1)

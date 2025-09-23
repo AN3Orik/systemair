@@ -8,6 +8,7 @@ from pymodbus.client import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
 from .const import LOGGER
+from .modbus import parameter_map
 
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
@@ -18,7 +19,7 @@ class ModbusConnectionError(Exception):
 
 
 class SystemairVSRModbusClient:
-    """Provides a client for interacting with a Systemair VSR unit via Modbus."""
+    """Provides a client for interacting with a Systemair VSR unit."""
 
     def __init__(self, host: str, port: int, slave_id: int, timeout: int = 5) -> None:
         """Initialize the Modbus client."""
@@ -54,6 +55,20 @@ class SystemairVSRModbusClient:
                     await self._worker_task
             await self._close_connection()
             LOGGER.info("Systemair Modbus client worker stopped.")
+
+    async def test_connection(self) -> bool:
+        """Start, test a single read, and stop the client to validate connection."""
+        try:
+            await self.start()
+            test_register_1based = parameter_map["REG_TC_SP"].register
+            await self._queue_request("read", address=test_register_1based - 1, count=1)
+        except (TimeoutError, ModbusConnectionError) as e:
+            LOGGER.error("Failed to connect during test: %s", e)
+            return False
+        else:
+            return True
+        finally:
+            await self.stop()
 
     async def _ensure_connected(self) -> None:
         """Ensure the client is connected, establishing connection if needed."""

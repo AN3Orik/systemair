@@ -47,10 +47,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         model=model,
     )
 
+    entry.async_on_unload(entry.add_update_listener(async_options_update_listener))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
+
+
+async def async_options_update_listener(_hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    entry.runtime_data.model = entry.options[CONF_MODEL]
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

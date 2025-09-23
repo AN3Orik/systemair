@@ -2,17 +2,26 @@
     "config": {
         "step": {
             "user": {
-                "description": "You need enter IAM Module IP Address",
+                "title": "Connect to Systemair Unit",
+                "description": "Enter the connection details for your Systemair IAM module. Press Submit to check the connection.",
                 "data": {
-                    "ip_address": "IP Address",
+                    "host": "IP Address",
+                    "port": "Port",
+                    "slave_id": "Slave ID"
+                }
+            },
+            "model": {
+                "title": "Select Your Unit Model",
+                "description": "Choose your ventilation unit model. This is required for accurate power consumption calculations.",
+                "data": {
                     "model": "Ventilation Unit Model"
                 }
             }
         },
         "error": {
-            "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred.",
-            "already_configured": "This unit is already configured."
+            "cannot_connect": "Unable to connect to the device. Please check the IP address, port, and that the device is online.",
+            "unknown": "An unknown error occurred.",
+            "already_configured": "This device is already configured."
         }
     },
     "options": {

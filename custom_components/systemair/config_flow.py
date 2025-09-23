@@ -28,10 +28,10 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        _config_entry: config_entries.ConfigEntry,
     ) -> SystemairOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return SystemairOptionsFlowHandler(config_entry)
+        return SystemairOptionsFlowHandler()
 
     async def _validate_connection(self, user_input: dict) -> None:
         """Validate the connection to the VSR unit."""
@@ -55,7 +55,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except (TimeoutError, OSError) as e:
                 LOGGER.exception("Unexpected exception: %s", e)
-                errors["base"] = "cannot_connect"
+                errors["base"] = "unknown"
             else:
                 unique_id = f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
                 await self.async_set_unique_id(unique_id)
@@ -70,7 +70,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_HOST): selector.TextSelector(),
                     vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
                     vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
-                    vol.Required(CONF_MODEL): selector.SelectSelector(
+                    vol.Required(CONF_MODEL, default=next(iter(MODEL_SPECS))): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=list(MODEL_SPECS.keys()),
                             mode=selector.SelectSelectorMode.DROPDOWN,
@@ -84,6 +84,11 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle an options flow for Systemair."""
+
+    @property
+    def config_entry(self) -> config_entries.ConfigEntry:
+        """Return the config entry for this flow."""
+        return self.hass.config_entries.async_get_entry(self.handler)
 
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Manage the options."""

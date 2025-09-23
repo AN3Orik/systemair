@@ -41,6 +41,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize."""
         self.client = client
         self.config_entry = config_entry
+
         super().__init__(
             hass=hass,
             logger=LOGGER,

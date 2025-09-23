@@ -1,0 +1,164 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "description": "Вам необходимо ввести IP-адрес модуля IAM.",
+                "data": {
+                    "ip_address": "IP-адрес",
+                    "model": "Модель вентиляционной установки"
+                }
+            }
+        },
+        "error": {
+            "connection": "Невозможно подключиться к серверу.",
+            "unknown": "Произошла неизвестная ошибка.",
+            "already_configured": "Это устройство уже настроено."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Настройки Systemair",
+                "data": {
+                    "model": "Модель вентиляционной установки"
+                }
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "heat_exchange_active": {
+                "name": "Теплообмен активен"
+            },
+            "heater_active": {
+                "name": "Нагреватель активен"
+            }
+        },
+        "climate": {
+            "saveconnect": {
+                "name": "Устройство",
+                "state_attributes": {
+                    "preset_mode": {
+                        "state": {
+                            "manual": "Ручной",
+                            "crowded": "Многолюдно",
+                            "refresh": "Проветривание",
+                            "fireplace": "Камин",
+                            "away": "Отсутствие",
+                            "holiday": "Отпуск"
+                        }
+                    }
+                }
+            }
+        },
+        "number": {
+            "time_delay_holiday": {
+                "name": "Отпуск: Задержка"
+            },
+            "time_delay_away": {
+                "name": "Отсутствие: Задержка"
+            },
+            "time_delay_fireplace": {
+                "name": "Камин: Задержка"
+            },
+            "time_delay_refresh": {
+                "name": "Проветривание: Задержка"
+            },
+            "time_delay_crowded": {
+                "name": "Многолюдно: Задержка"
+            }
+        },
+        "sensor": {
+            "outside_air_temperature": {
+                "name": "Температура наружного воздуха"
+            },
+            "extract_air_temperature": {
+                "name": "Температура вытяжного воздуха"
+            },
+            "supply_air_temperature": {
+                "name": "Температура приточного воздуха"
+            },
+            "overheat_temperature": {
+                "name": "Датчик температуры перегрева"
+            },
+            "extract_air_relative_humidity": {
+                "name": "Относительная влажность вытяжного воздуха"
+            },
+            "meter_saf_rpm": {
+                "name": "Обороты вентилятора приточного воздуха"
+            },
+            "meter_saf_reg_speed": {
+                "name": "Скорость вентилятора приточного воздуха"
+            },
+            "meter_eaf_rpm": {
+                "name": "Обороты вентилятора вытяжного воздуха"
+            },
+            "meter_eaf_reg_speed": {
+                "name": "Скорость вентилятора вытяжного воздуха"
+            },
+            "heater_output_value": {
+                "name": "Мощность нагревателя"
+            },
+            "filter_remaining_time": {
+                "name": "Оставшееся время работы фильтра"
+            },
+            "iaq_level": {
+                "name": "Качество воздуха в помещении"
+            },
+            "demand_active_controller": {
+                "name": "Активный контроллер по требованию"
+            },
+            "defrosting_state": {
+                "name": "Состояние разморозки"
+            },
+            "supply_fan_power": {
+                "name": "Мощность приточного вентилятора"
+            },
+            "extract_fan_power": {
+                "name": "Мощность вытяжного вентилятора"
+            },
+            "total_power": {
+                "name": "Общее энергопотребление"
+            }
+        },
+        "switch": {
+            "eco_mode": {
+                "name": "Эко-режим"
+            },
+            "free_cooling": {
+                "name": "Свободное охлаждение"
+            },
+            "manual_fan_stop_allowed": {
+                "name": "Разрешить ручную остановку вентилятора"
+            }
+        },
+        "select": {
+            "temperature_control_mode": {
+                "name": "Режим контроля температуры",
+                "state": {
+                    "supply_air": "Приточный воздух",
+                    "room_air": "Комнатный воздух",
+                    "extract_air": "Вытяжной воздух"
+                }
+            },
+            "fan_regulation_unit": {
+                "name": "Блок регулирования вентилятора",
+                "state": {
+                    "manual_percent": "Ручной, %",
+                    "manual_rpm": "Ручной, об/мин",
+                    "pressure": "Давление",
+                    "flow": "Поток",
+                    "external": "Внешний"
+                }
+            },
+            "defrosting_mode": {
+                "name": "Режим разморозки",
+                "state": {
+                    "soft": "Мягкий",
+                    "normal": "Обычный",
+                    "hard": "Интенсивный"
+                }
+            }
+        }
+    }
+}
