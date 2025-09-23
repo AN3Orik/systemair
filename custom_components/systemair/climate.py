@@ -217,9 +217,6 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
             await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"], ventilation_mode)
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
-        finally:
-            await asyncio.sleep(2)
-            await self.coordinator.async_refresh()
 
     @property
     def fan_mode(self) -> str | None:
