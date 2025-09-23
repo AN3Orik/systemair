@@ -52,6 +52,7 @@ DEFROSTING_STATE_MAP = {
 @dataclass(kw_only=True, frozen=True)
 class SystemairSensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair sensor entity."""
+
     registry: ModbusParameter
 
 
@@ -211,21 +212,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
-    
-    sensors = [
-        SystemairSensor(coordinator=coordinator, entity_description=desc)
-        for desc in ENTITY_DESCRIPTIONS
-    ]
-    power_sensors = [
-        SystemairPowerSensor(coordinator=coordinator, entity_description=desc)
-        for desc in POWER_SENSORS
-    ]
-    
+
+    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS]
+    power_sensors = [SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS]
+
     async_add_entities(sensors + power_sensors)
 
 
 class SystemairSensor(SystemairEntity, SensorEntity):
     """Systemair Sensor class."""
+
     _attr_has_entity_name = True
 
     entity_description: SystemairSensorEntityDescription
@@ -294,7 +290,7 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
 
         # Assume max fan power is split 50/50 between supply and extract fans
         max_fan_power_per_fan = specs["fan_power"] / 2
-        
+
         supply_power = (supply_fan_pct / 100) * max_fan_power_per_fan
         extract_power = (extract_fan_pct / 100) * max_fan_power_per_fan
         heater_power = specs["heater_power"] if heater_on else 0

@@ -35,9 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         slave_id=entry.data[CONF_SLAVE_ID],
     )
 
-    coordinator = SystemairDataUpdateCoordinator(
-        hass=hass, client=client, config_entry=entry
-    )
+    coordinator = SystemairDataUpdateCoordinator(hass=hass, client=client, config_entry=entry)
 
     model = entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "VSR 300"))
 

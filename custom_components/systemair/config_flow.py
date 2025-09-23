@@ -85,24 +85,18 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle an options flow for Systemair."""
 
-    async def async_step_init(
-        self, user_input: dict | None = None
-    ) -> config_entries.ConfigFlowResult:
+    async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        default_model = self.config_entry.options.get(
-            CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300")
-        )
+        default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_MODEL, default=default_model
-                    ): selector.SelectSelector(
+                    vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=list(MODEL_SPECS.keys()),
                             mode=selector.SelectSelectorMode.DROPDOWN,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import asyncio.exceptions
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.const import EntityCategory

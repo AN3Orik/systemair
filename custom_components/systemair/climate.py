@@ -1,4 +1,4 @@
-"""Systemair integration."""
+"""Systemair HVAC integration."""
 
 import asyncio.exceptions
 from typing import Any, ClassVar
@@ -226,8 +226,6 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
-        if self.hvac_mode == HVACMode.OFF:
-            return None
         mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
         return VALUE_TO_FAN_MODE_MAP.get(int(mode), FAN_LOW)
 

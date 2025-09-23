@@ -51,7 +51,7 @@ ENTITY_DESCRIPTIONS = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    hass: HomeAssistant,  # noqa: ARG001
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -87,7 +87,7 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
         """Return true if the switch is on."""
         return self.coordinator.get_modbus_data(self.entity_description.registry) != 0
 
-    async def _async_set_state(self, value: bool) -> None:
+    async def _async_set_state(self, *, value: bool) -> None:
         """Turn on or off the switch."""
         await self.coordinator.set_modbus_data(self.entity_description.registry, value=value)
         await asyncio.sleep(1)
@@ -95,8 +95,8 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""
-        await self._async_set_state(True)
+        await self._async_set_state(value=True)
 
     async def async_turn_off(self, **_: Any) -> None:
         """Turn off the switch."""
-        await self._async_set_state(False)
+        await self._async_set_state(value=False)

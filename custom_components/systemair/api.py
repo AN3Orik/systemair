@@ -26,17 +26,6 @@ class SystemairVSRModbusClient:
         self._lock = asyncio.Lock()
         self._is_connected = False
 
-    def _raise_if_response_error(self, result: Any, context: str) -> None:
-        """Raise a connection error if the Modbus result is an error."""
-        if result.isError():
-            msg = f"{context}: {result}"
-            raise ModbusConnectionError(msg)
-
-    def _raise_for_retries_failed(self, context: str) -> None:
-        """Raise a connection error when retries have failed."""
-        msg = f"{context} after retries."
-        raise ModbusConnectionError(msg)
-
     async def close(self) -> None:
         """Close the Modbus connection."""
         if self._is_connected:
@@ -67,20 +56,36 @@ class SystemairVSRModbusClient:
                 await self.close()
 
     async def write_register(self, address_1based: int, value: int) -> None:
-        """Write a single holding register. Expects a 1-based address."""
+        """Write a single holding register with retry logic."""
+        max_retries = 3
+        retry_delay = 0.3
+
         async with self._lock:
-            try:
-                await self._ensure_connected()
-                result = await self._client.write_register(address=address_1based - 1, value=value, device_id=self.slave_id)
-                self._raise_if_response_error(result, f"Error writing to register {address_1based}")
-                LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
-            except (ModbusException, ModbusConnectionError) as e:
-                LOGGER.error("Modbus write error: %s", e)
-                await self.close()
-                raise
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    await self._ensure_connected()
+                    result = await self._client.write_register(address=address_1based - 1, value=value, device_id=self.slave_id)
+                    if not result.isError():
+                        LOGGER.debug(f"Successfully wrote {value} to register {address_1based}")
+                        return
+
+                    last_exception = result
+                    LOGGER.debug(f"Write error on register {address_1based}, attempt {attempt + 1}: {result}")
+
+                except ModbusException as e:
+                    last_exception = e
+                    LOGGER.debug(f"Write exception on register {address_1based}, attempt {attempt + 1}: {e}")
+
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+
+            msg = f"Failed to write to register {address_1based} after {max_retries} attempts: {last_exception}"
+            await self.close()
+            raise ModbusConnectionError(msg)
 
     async def get_all_data(self) -> dict[str, Any]:
-        """Read all required registers using block reads with retry logic for stability."""
+        """Read all required registers using a robust, paced, and fault-tolerant approach."""
         read_blocks = [
             (1001, 62),
             (1101, 80),
@@ -112,33 +117,40 @@ class SystemairVSRModbusClient:
 
         all_registers = {}
         max_retries = 3
-        retry_delay = 0.25
+        retry_delay = 0.3
 
         async with self._lock:
-            try:
-                await self._ensure_connected()
-                for start_addr_1based, count in read_blocks:
-                    for attempt in range(max_retries):
+            await self._ensure_connected()
+            for start_addr_1based, count in read_blocks:
+                block_success = False
+                for attempt in range(max_retries):
+                    try:
                         result = await self._client.read_holding_registers(
                             address=start_addr_1based - 1, count=count, device_id=self.slave_id
                         )
-                        if result.isError():
-                            if result.exception_code == MODBUS_DEVICE_BUSY_EXCEPTION and attempt < max_retries - 1:
-                                LOGGER.debug(f"Device busy on block starting at {start_addr_1based}, retrying...")
-                                await asyncio.sleep(retry_delay)
-                                continue
-                            self._raise_if_response_error(result, f"Block {start_addr_1based} read error")
 
-                        for i, reg_val in enumerate(result.registers):
-                            key = str(start_addr_1based - 1 + i)
-                            all_registers[key] = reg_val
-                        break
-                    else:
-                        self._raise_for_retries_failed(f"Failed to read block {start_addr_1based}")
-                    await asyncio.sleep(0.05)
-            except (ModbusException, ModbusConnectionError) as e:
-                LOGGER.error("Modbus read error during full update: %s", e)
-                await self.close()
-                raise
+                        if not result.isError():
+                            for i, reg_val in enumerate(result.registers):
+                                key = str(start_addr_1based - 1 + i)
+                                all_registers[key] = reg_val
+                            block_success = True
+                            break
+
+                        LOGGER.debug(f"Modbus error on block {start_addr_1based}, attempt {attempt + 1}: {result}. Retrying...")
+
+                    except ModbusException as e:
+                        LOGGER.debug(f"Modbus exception on block {start_addr_1based}, attempt {attempt + 1}: {e}. Retrying...")
+
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+
+                if not block_success:
+                    LOGGER.error(f"Failed to read block {start_addr_1based} after {max_retries} attempts. Continuing with next blocks.")
+
+                await asyncio.sleep(0.15)
+
+        if not all_registers:
+            msg = "Failed to read any data from the device after multiple retries."
+            raise ModbusConnectionError(msg)
 
         return all_registers
