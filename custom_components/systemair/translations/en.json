@@ -7,13 +7,7 @@
                 "data": {
                     "host": "IP Address",
                     "port": "Port",
-                    "slave_id": "Slave ID"
-                }
-            },
-            "model": {
-                "title": "Select Your Unit Model",
-                "description": "Choose your ventilation unit model. This is required for accurate power consumption calculations.",
-                "data": {
+                    "slave_id": "Slave ID",
                     "model": "Ventilation Unit Model"
                 }
             }
