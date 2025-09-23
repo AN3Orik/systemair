@@ -207,8 +207,6 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     def preset_mode(self) -> str | None:
         """Return the current preset mode."""
         mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MODE"])
-        if self.hvac_mode == HVACMode.OFF:
-            return None
         return VALUE_TO_PRESET_MODE_MAP.get(int(mode), PRESET_MODE_MANUAL)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:

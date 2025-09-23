@@ -34,6 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         port=entry.data[CONF_PORT],
         slave_id=entry.data[CONF_SLAVE_ID],
     )
+    await client.start()
 
     coordinator = SystemairDataUpdateCoordinator(hass=hass, client=client, config_entry=entry)
 
@@ -54,10 +55,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
-    client: SystemairVSRModbusClient = entry.runtime_data.client
-    await client.close()
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        client: SystemairVSRModbusClient = entry.runtime_data.client
+        await client.stop()
+
+    return unload_ok
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
