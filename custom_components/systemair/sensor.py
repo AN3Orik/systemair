@@ -194,7 +194,7 @@ ENTITY_DESCRIPTIONS = (
     *(
         SystemairSensorEntityDescription(
             key=f"alarm_{param.short.lower()}",
-            name=param.description,
+            translation_key=f"alarm_{param.short.lower()}",
             device_class=SensorDeviceClass.ENUM,
             options=["Inactive", "Active", "Waiting", "Cleared Error Active"],
             registry=param,

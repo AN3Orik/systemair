@@ -122,6 +122,54 @@
             },
             "total_power": {
                 "name": "Общее энергопотребление"
+            },
+            "alarm_reg_alarm_frost_prot_alarm": {
+                "name": "Авария: Защита от замерзания"
+            },
+            "alarm_reg_alarm_defrosting_alarm": {
+                "name": "Авария: Разморозка"
+            },
+            "alarm_reg_alarm_saf_rpm_alarm": {
+                "name": "Авария: Обороты приточного вентилятора"
+            },
+            "alarm_reg_alarm_eaf_rpm_alarm": {
+                "name": "Авария: Обороты вытяжного вентилятора"
+            },
+            "alarm_reg_alarm_sat_alarm": {
+                "name": "Авария: Температура приточного воздуха"
+            },
+            "alarm_reg_alarm_eat_alarm": {
+                "name": "Авария: Температура вытяжного воздуха"
+            },
+            "alarm_reg_alarm_rgs_alarm": {
+                "name": "Авария: Датчик вращения (RGS)"
+            },
+            "alarm_reg_alarm_filter_alarm": {
+                "name": "Авария: Фильтр"
+            },
+            "alarm_reg_alarm_co2_alarm": {
+                "name": "Авария: Датчик CO2"
+            },
+            "alarm_reg_alarm_low_sat_alarm": {
+                "name": "Авария: Низкая температура приточного воздуха"
+            },
+            "alarm_reg_alarm_overheat_temperature_alarm": {
+                "name": "Авария: Перегрев"
+            },
+            "alarm_reg_alarm_fire_alarm_alarm": {
+                "name": "Авария: Пожарная тревога"
+            },
+            "alarm_reg_alarm_filter_warning_alarm": {
+                "name": "Предупреждение: Фильтр"
+            },
+            "alarm_reg_alarm_type_a": {
+                "name": "Авария: Тип A"
+            },
+            "alarm_reg_alarm_type_b": {
+                "name": "Авария: Тип B"
+            },
+            "alarm_reg_alarm_type_c": {
+                "name": "Авария: Тип C"
             }
         },
         "switch": {

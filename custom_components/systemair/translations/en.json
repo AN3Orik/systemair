@@ -122,6 +122,54 @@
             },
             "total_power": {
                 "name": "Total Power Consumption"
+            },
+            "alarm_reg_alarm_frost_prot_alarm": {
+                "name": "Frost Protection Alarm"
+            },
+            "alarm_reg_alarm_defrosting_alarm": {
+                "name": "Defrosting Alarm"
+            },
+            "alarm_reg_alarm_saf_rpm_alarm": {
+                "name": "Supply Air Fan RPM Alarm"
+            },
+            "alarm_reg_alarm_eaf_rpm_alarm": {
+                "name": "Extract Air Fan RPM Alarm"
+            },
+            "alarm_reg_alarm_sat_alarm": {
+                "name": "Supply Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_eat_alarm": {
+                "name": "Extract Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_rgs_alarm": {
+                "name": "Rotation Guard (RGS) Alarm"
+            },
+            "alarm_reg_alarm_filter_alarm": {
+                "name": "Filter Alarm"
+            },
+            "alarm_reg_alarm_co2_alarm": {
+                "name": "CO2 Alarm"
+            },
+            "alarm_reg_alarm_low_sat_alarm": {
+                "name": "Low Supply Air Temperature Alarm"
+            },
+            "alarm_reg_alarm_overheat_temperature_alarm": {
+                "name": "Overheat Temperature Alarm"
+            },
+            "alarm_reg_alarm_fire_alarm_alarm": {
+                "name": "Fire Alarm"
+            },
+            "alarm_reg_alarm_filter_warning_alarm": {
+                "name": "Filter Warning"
+            },
+            "alarm_reg_alarm_type_a": {
+                "name": "Alarm Type A Active"
+            },
+            "alarm_reg_alarm_type_b": {
+                "name": "Alarm Type B Active"
+            },
+            "alarm_reg_alarm_type_c": {
+                "name": "Alarm Type C Active"
             }
         },
         "switch": {
