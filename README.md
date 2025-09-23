@@ -25,10 +25,10 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
     *   Indoor Air Quality (IAQ) Level
     *   Active Demand Controller (CO2 or RH)
     *   Current Defrosting State
-*   **Greatly Improved Stability:** The Modbus communication has been completely overhauled to be more robust and reliable, preventing frequent 'unavailable' states and errors by intelligently handling device responses.
 *   **Sensor Monitoring:** Track key environmental data, including outdoor, supply, and extract air temperatures, as well as relative humidity.
 *   **Device Status:** Monitor fan RPM, fan speed percentages, and heater output.
 *   **Diagnostics:** Keep an eye on filter lifetime and view detailed alarm statuses.
+*   **Calculated Power Consumption:** Monitor the estimated power usage of the supply fan, extract fan, and the total power consumption of the unit, including the re-heater. This feature relies on selecting the correct unit model during configuration. 
 
 ## Prerequisites
 
@@ -37,8 +37,6 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
 3.  You need to know the IP address of the IAM module. You can typically find this in your router's client list.
 
 ## Installation
-
-(Installation instructions remain the same - HACS or Manual)
 
 ### HACS
 
@@ -67,11 +65,11 @@ Configuration is done entirely through the Home Assistant user interface.
     *   **Host:** The IP address of your Systemair IAM module (e.g., `192.168.1.50`).
     *   **Port:** The Modbus TCP port for the IAM module. The default is `502`.
     *   **Slave ID:** The ModBus slave ID of the unit. The default is `1`.
-    *   **Model:** Select your specific SAVE unit model (e.g., `VSR 300`, `VSR 500`). **This is crucial for accurate power consumption calculations.**
+    *   **Ventilation Unit Model:** Select your specific SAVE unit model from the dropdown list (e.g., `VSR 300`, `VSR 500`). **This is crucial for accurate power consumption calculations.**
 
 5.  Click **Submit**. The integration will test the connection and add the Systemair device and its entities to Home Assistant.
 
-You can change the model later by navigating to the integration's page and clicking **Configure**.
+You can change the model at any time after installation by navigating to the integration's page and clicking **Configure**.
 
 ## Entities Provided
 
