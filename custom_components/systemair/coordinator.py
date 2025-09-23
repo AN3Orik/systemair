@@ -36,9 +36,11 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         client: SystemairVSRModbusClient,
+        config_entry: SystemairConfigEntry,
     ) -> None:
         """Initialize."""
         self.client = client
+        self.config_entry = config_entry
         super().__init__(
             hass=hass,
             logger=LOGGER,

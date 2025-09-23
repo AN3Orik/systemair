@@ -1,4 +1,4 @@
-"""Sensor platform for Systemair0."""
+"""Sensor platform for Systemair."""
 
 from __future__ import annotations
 
@@ -6,12 +6,21 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
-from homeassistant.components.sensor.const import SensorDeviceClass, SensorStateClass
-from homeassistant.const import PERCENTAGE, REVOLUTIONS_PER_MINUTE, EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    REVOLUTIONS_PER_MINUTE,
+    EntityCategory,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 
+from .const import MODEL_SPECS
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, alarm_parameters, parameter_map
 
@@ -28,9 +37,7 @@ ALARM_STATE_TO_VALUE_MAP = {
     "Waiting": 2,
     "Cleared Error Active": 3,
 }
-
 VALUE_MAP_TO_ALARM_STATE = {value: key for key, value in ALARM_STATE_TO_VALUE_MAP.items()}
-
 IAQ_LEVEL_MAP = {0: "Perfect", 1: "Good", 2: "Improving"}
 DEMAND_CONTROLLER_MAP = {0: "CO2", 1: "RH"}
 DEFROSTING_STATE_MAP = {
@@ -45,9 +52,37 @@ DEFROSTING_STATE_MAP = {
 @dataclass(kw_only=True, frozen=True)
 class SystemairSensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair sensor entity."""
-
     registry: ModbusParameter
 
+
+@dataclass(kw_only=True, frozen=True)
+class SystemairPowerSensorEntityDescription(SensorEntityDescription):
+    """Describes a Systemair power sensor entity."""
+
+
+POWER_SENSORS: tuple[SystemairPowerSensorEntityDescription, ...] = (
+    SystemairPowerSensorEntityDescription(
+        key="supply_fan_power",
+        translation_key="supply_fan_power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SystemairPowerSensorEntityDescription(
+        key="extract_fan_power",
+        translation_key="extract_fan_power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SystemairPowerSensorEntityDescription(
+        key="total_power",
+        translation_key="total_power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+)
 
 ENTITY_DESCRIPTIONS = (
     SystemairSensorEntityDescription(
@@ -170,23 +205,27 @@ ENTITY_DESCRIPTIONS = (
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    hass: HomeAssistant,  # noqa: ARG001
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
-    async_add_entities(
-        SystemairSensor(
-            coordinator=entry.runtime_data.coordinator,
-            entity_description=entity_description,
-        )
-        for entity_description in ENTITY_DESCRIPTIONS
-    )
+    coordinator = entry.runtime_data.coordinator
+    
+    sensors = [
+        SystemairSensor(coordinator=coordinator, entity_description=desc)
+        for desc in ENTITY_DESCRIPTIONS
+    ]
+    power_sensors = [
+        SystemairPowerSensor(coordinator=coordinator, entity_description=desc)
+        for desc in POWER_SENSORS
+    ]
+    
+    async_add_entities(sensors + power_sensors)
 
 
 class SystemairSensor(SystemairEntity, SensorEntity):
     """Systemair Sensor class."""
-
     _attr_has_entity_name = True
 
     entity_description: SystemairSensorEntityDescription
@@ -219,3 +258,53 @@ class SystemairSensor(SystemairEntity, SensorEntity):
             return VALUE_MAP_TO_ALARM_STATE.get(value, "Inactive")
 
         return str(value)
+
+
+class SystemairPowerSensor(SystemairEntity, SensorEntity):
+    """Systemair Power Sensor class for calculated values."""
+
+    _attr_has_entity_name = True
+    entity_description: SystemairPowerSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: SystemairDataUpdateCoordinator,
+        entity_description: SystemairPowerSensorEntityDescription,
+    ) -> None:
+        """Initialize the power sensor class."""
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the calculated power consumption."""
+        model = self.coordinator.config_entry.runtime_data.model
+        specs = MODEL_SPECS.get(model)
+        if not specs:
+            return None
+
+        # Get current fan speeds and heater status
+        supply_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        extract_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
+        heater_on = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_TRIAC"])
+
+        if supply_fan_pct is None or extract_fan_pct is None or heater_on is None:
+            return None
+
+        # Assume max fan power is split 50/50 between supply and extract fans
+        max_fan_power_per_fan = specs["fan_power"] / 2
+        
+        supply_power = (supply_fan_pct / 100) * max_fan_power_per_fan
+        extract_power = (extract_fan_pct / 100) * max_fan_power_per_fan
+        heater_power = specs["heater_power"] if heater_on else 0
+
+        key = self.entity_description.key
+        if key == "supply_fan_power":
+            return round(supply_power, 1)
+        if key == "extract_fan_power":
+            return round(extract_power, 1)
+        if key == "total_power":
+            return round(supply_power + extract_power + heater_power, 1)
+
+        return None

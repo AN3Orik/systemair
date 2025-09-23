@@ -7,10 +7,21 @@ LOGGER: Logger = getLogger(__package__)
 DOMAIN = "systemair"
 ATTRIBUTION = "Data provided by Systemair SAVE Connect."
 
-# Constants for Modbus configuration
+# --- Configuration Constants ---
+CONF_MODEL = "model"
 CONF_SLAVE_ID = "slave_id"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
+
+# --- Power Specs for different models ---
+MODEL_SPECS = {
+    "VSR 300": {"fan_power": 166, "heater_power": 1670},
+    "VSR 500": {"fan_power": 338, "heater_power": 1670},
+    "VSR 150/B": {"fan_power": 74, "heater_power": 500},
+    "VTR 200/B (500Wt Heater)": {"fan_power": 168, "heater_power": 500},
+    "VTR 200/B (1000Wt Heater)": {"fan_power": 168, "heater_power": 1000},
+}
+
 
 # Constants from the old integration
 MAX_TEMP = 30

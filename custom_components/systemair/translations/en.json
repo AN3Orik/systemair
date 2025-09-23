@@ -4,7 +4,8 @@
             "user": {
                 "description": "You need enter IAM Module IP Address",
                 "data": {
-                    "ip_address": "IP Address"
+                    "ip_address": "IP Address",
+                    "model": "Ventilation Unit Model"
                 }
             }
         },
@@ -12,6 +13,16 @@
             "connection": "Unable to connect to the server.",
             "unknown": "Unknown error occurred.",
             "already_configured": "This unit is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Systemair Settings",
+                "data": {
+                    "model": "Ventilation Unit Model"
+                }
+            }
         }
     },
     "entity": {
@@ -99,6 +110,15 @@
             },
             "defrosting_state": {
                 "name": "Defrosting State"
+            },
+            "supply_fan_power": {
+                "name": "Supply Fan Power"
+            },
+            "extract_fan_power": {
+                "name": "Extract Fan Power"
+            },
+            "total_power": {
+                "name": "Total Power Consumption"
             }
         },
         "switch": {

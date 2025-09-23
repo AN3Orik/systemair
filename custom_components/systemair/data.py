@@ -23,6 +23,7 @@ class SystemairData:
     client: SystemairVSRModbusClient
     coordinator: SystemairDataUpdateCoordinator
     integration: Integration
+    model: str
 
     iam_sw_version: str | None = None
     mb_hw_version: str | None = None
