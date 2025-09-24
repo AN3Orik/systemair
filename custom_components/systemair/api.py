@@ -112,6 +112,8 @@ class SystemairVSRModbusClient:
                     result = await self._client.read_holding_registers(address=address, count=kwargs["count"], device_id=self.slave_id)
                 elif request_type == "write":
                     result = await self._client.write_register(address=address, value=kwargs["value"], device_id=self.slave_id)
+                elif request_type == "write_multiple":
+                    result = await self._client.write_registers(address=address, values=kwargs["values"], device_id=self.slave_id)
                 else:
                     self._raise_unknown_request_type(request_type)
 
@@ -175,6 +177,13 @@ class SystemairVSRModbusClient:
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""
         await self._queue_request("write", address=address_1based - 1, value=value)
+
+    async def write_registers_32bit(self, address_1based: int, value: int) -> None:
+        """Queue a write request for a 32-bit value across two registers."""
+        low_word = value & 0xFFFF
+        high_word = value >> 16
+        values = [low_word, high_word]
+        await self._queue_request("write_multiple", address=address_1based - 1, values=values)
 
     async def get_all_data(self) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""

@@ -92,6 +92,15 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             msg = f"Failed to write to register {register.register}: {exc}"
             raise UpdateFailed(msg) from exc
 
+    async def async_set_modbus_data_32bit(self, register: ModbusParameter, value: int) -> None:
+        """Set the data for a 32-bit Modbus register."""
+        try:
+            await self.client.write_registers_32bit(register.register, value)
+            await self.async_request_refresh()
+        except ModbusConnectionError as exc:
+            msg = f"Failed to write to 32-bit register starting at {register.register}: {exc}"
+            raise UpdateFailed(msg) from exc
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
