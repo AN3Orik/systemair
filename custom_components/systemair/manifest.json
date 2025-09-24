@@ -13,14 +13,5 @@
   "requirements": [
     "pymodbus>=3.11.1"
   ],
-  "version": "1.0.5",
-  "dependencies": [
-    "frontend"
-  ],
-  "resources": [
-    {
-      "type": "module",
-      "url": "/hacsfiles/systemair/systemair-alarm-history-card.js"
-    }
-  ]
+  "version": "1.0.5"
 }
