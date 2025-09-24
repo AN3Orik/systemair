@@ -118,7 +118,7 @@ The primary entity for controlling the unit.
 
 ## Lovelace Cards
 
-To get the best experience, it is recommended to also install the Systemair Lovelace Cards pack, which provides specific way to display some information from integration (example: alarm history).
+To get the best experience, it is recommended to also install the [Systemair Lovelace Cards](https://github.com/AN3Orik/systemair-lovelace) pack, which provides specific way to display some information from integration (example: alarm history).
 
 1.  Open HACS and go to "Custom integrations". Enter the URL `https://github.com/AN3Orik/systemair-lovelace`, choose type Dashboard and click Add.
 2.  Find the "Systemair Lovelace Cards" in the list and click **Download**.
