@@ -42,6 +42,18 @@ ENTITY_DESCRIPTIONS = (
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_OUTPUT_TRIAC"],
     ),
+    SystemairBinarySensorEntityDescription(
+        key="heat_recovery_active",
+        translation_key="heat_recovery_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_HEAT_RECOVERY"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="cool_recovery_active",
+        translation_key="cool_recovery_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_COOLING_RECOVERY"],
+    ),
 )
 
 

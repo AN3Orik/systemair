@@ -9,7 +9,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import EntityCategory, UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -77,6 +77,26 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
         mode=NumberMode.SLIDER,
         native_unit_of_measurement=UnitOfTime.HOURS,
         registry=parameter_map["REG_USERMODE_CROWDED_TIME"],
+    ),
+    SystemairNumberEntityDescription(
+        key="filter_period",
+        translation_key="filter_period",
+        entity_category=EntityCategory.CONFIG,
+        icon="mdi:filter-cog",
+        native_step=1,
+        mode=NumberMode.SLIDER,
+        native_unit_of_measurement=UnitOfTime.MONTHS,
+        registry=parameter_map["REG_FILTER_PERIOD"],
+    ),
+    SystemairNumberEntityDescription(
+        key="eco_mode_temperature_offset",
+        translation_key="eco_mode_temperature_offset",
+        entity_category=EntityCategory.CONFIG,
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_step=0.1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        registry=parameter_map["REG_ECO_T_Y1_OFFSET"],
     ),
 )
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -22,7 +22,12 @@ from homeassistant.const import (
 
 from .const import MODEL_SPECS
 from .entity import SystemairEntity
-from .modbus import ModbusParameter, alarm_parameters, parameter_map
+from .modbus import (
+    ModbusParameter,
+    alarm_log_registers,
+    alarm_parameters,
+    parameter_map,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -30,6 +35,50 @@ if TYPE_CHECKING:
 
     from .coordinator import SystemairDataUpdateCoordinator
     from .data import SystemairConfigEntry
+
+YEAR_2000_THRESHOLD = 100
+
+ALARM_ID_TO_NAME_MAP = {
+    0: "Frost protection",
+    1: "Frost protection temperature sensor",
+    2: "Defrosting error",
+    3: "Supply air fan feedback",
+    4: "Extract air fan feedback",
+    5: "Supply air fan control error",
+    6: "Extract air fan control error",
+    7: "Emergency thermostat",
+    8: "Plate heat exchanger bypass damper",
+    9: "Rotary heat exchanger rotation guard",
+    10: "Secondary air damper",
+    11: "Outdoor air temperature sensor",
+    12: "Overheat temperature sensor",
+    13: "Supply air temperature sensor",
+    14: "Room air temperature sensor",
+    15: "Extract air temperature sensor",
+    16: "Extra controller temperature sensor",
+    17: "Efficiency temperature sensor",
+    18: "Inbuilt relative humidity sensor",
+    19: "Inbuilt extract air temperature sensor",
+    20: "Filter",
+    21: "Extra controller alarm",
+    22: "External stop",
+    23: "Manual fan stop",
+    24: "Heater overheat",
+    25: "Low supply air temperature",
+    26: "External CO2 sensor",
+    27: "External relative humidity sensor",
+    28: "Manual output mode",
+    29: "Fire alarm",
+    30: "Filter warning",
+    34: "Bypass damper feedback",
+}
+
+ALARM_LOG_STATE_MAP = {
+    0: "Inactive",
+    1: "Active",
+    2: "Counter increasing",
+    3: "Acknowledged",
+}
 
 ALARM_STATE_TO_VALUE_MAP = {
     "Inactive": 0,
@@ -53,7 +102,7 @@ DEFROSTING_STATE_MAP = {
 class SystemairSensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair sensor entity."""
 
-    registry: ModbusParameter
+    registry: ModbusParameter | None = None
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -202,11 +251,17 @@ ENTITY_DESCRIPTIONS = (
         )
         for param in alarm_parameters.values()
     ),
+    SystemairSensorEntityDescription(
+        key="alarm_history",
+        translation_key="alarm_history",
+        icon="mdi:history",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001
+    _hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -225,6 +280,12 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     _attr_has_entity_name = True
     entity_description: SystemairSensorEntityDescription
 
+    _KEY_TO_MAP: ClassVar[dict[str, dict[int, str]]] = {
+        "iaq_level": IAQ_LEVEL_MAP,
+        "demand_active_controller": DEMAND_CONTROLLER_MAP,
+        "defrosting_state": DEFROSTING_STATE_MAP,
+    }
+
     def __init__(
         self,
         coordinator: SystemairDataUpdateCoordinator,
@@ -238,21 +299,74 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
-        value = self.coordinator.get_modbus_data(self.entity_description.registry)
-        value = int(value)
+        if self.coordinator.data is None:
+            return None
 
         key = self.entity_description.key
-        if key == "iaq_level":
-            return IAQ_LEVEL_MAP.get(value)
-        if key == "demand_active_controller":
-            return DEMAND_CONTROLLER_MAP.get(value)
-        if key == "defrosting_state":
-            return DEFROSTING_STATE_MAP.get(value)
 
-        if self.device_class == SensorDeviceClass.ENUM:
-            return VALUE_MAP_TO_ALARM_STATE.get(value, "Inactive")
+        if key == "alarm_history":
+            first_log = alarm_log_registers[0]
+            alarm_id_reg = first_log["id"]
+            alarm_id = self.coordinator.data.get(str(alarm_id_reg - 1))
+            if alarm_id is None or alarm_id == 0:
+                return "No recent alarms"
+            return ALARM_ID_TO_NAME_MAP.get(int(alarm_id), f"Unknown ID: {alarm_id}")
 
-        return str(value)
+        value = self.coordinator.get_modbus_data(self.entity_description.registry)
+        if value is None:
+            return None
+
+        int_value = int(value)
+        result = None
+
+        if value_map := self._KEY_TO_MAP.get(key):
+            result = value_map.get(int_value)
+        elif self.device_class == SensorDeviceClass.ENUM:
+            result = VALUE_MAP_TO_ALARM_STATE.get(int_value, "Inactive")
+        else:
+            result = str(value)
+
+        return result
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        if self.entity_description.key != "alarm_history":
+            return None
+
+        if self.coordinator.data is None:
+            return {"history": []}
+
+        history = []
+        data = self.coordinator.data
+
+        for log_regs in alarm_log_registers:
+            alarm_id = data.get(str(log_regs["id"] - 1))
+            if alarm_id is None or alarm_id == 0:
+                continue
+
+            state_val = data.get(str(log_regs["state"] - 1))
+            year = data.get(str(log_regs["year"] - 1))
+            month = data.get(str(log_regs["month"] - 1))
+            day = data.get(str(log_regs["day"] - 1))
+            hour = data.get(str(log_regs["hour"] - 1))
+            minute = data.get(str(log_regs["minute"] - 1))
+            second = data.get(str(log_regs["second"] - 1))
+
+            timestamp = "Unknown time"
+            if all(v is not None for v in [year, month, day, hour, minute, second]):
+                year_val = year + 2000 if year < YEAR_2000_THRESHOLD else year
+                timestamp = f"{year_val:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
+
+            history.append(
+                {
+                    "alarm": ALARM_ID_TO_NAME_MAP.get(alarm_id, f"Unknown ID: {alarm_id}"),
+                    "status": ALARM_LOG_STATE_MAP.get(state_val, "Unknown"),
+                    "timestamp": timestamp,
+                }
+            )
+
+        return {"history": history}
 
 
 class SystemairPowerSensor(SystemairEntity, SensorEntity):
@@ -274,6 +388,9 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the calculated power consumption."""
+        if self.coordinator.data is None:
+            return None
+
         model = self.coordinator.config_entry.runtime_data.model
         specs = MODEL_SPECS.get(model)
         if not specs:
@@ -298,17 +415,14 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
             return None
 
         # Calculate power for each component
-        supply_power = (supply_fan_pct / 100) * power_per_fan * num_supply_fans
-        extract_power = (extract_fan_pct / 100) * power_per_fan * num_extract_fans
+        supply_power = (float(supply_fan_pct) / 100) * power_per_fan * num_supply_fans
+        extract_power = (float(extract_fan_pct) / 100) * power_per_fan * num_extract_fans
         heater_power = specs.get("heater_power", 0) if heater_on else 0
 
-        # Return the correct value based on the sensor's key
-        key = self.entity_description.key
-        if key == "supply_fan_power":
-            return round(supply_power, 1)
-        if key == "extract_fan_power":
-            return round(extract_power, 1)
-        if key == "total_power":
-            return round(supply_power + extract_power + heater_power, 1)
+        power_map = {
+            "supply_fan_power": round(supply_power, 1),
+            "extract_fan_power": round(extract_power, 1),
+            "total_power": round(supply_power + extract_power + heater_power, 1),
+        }
 
-        return None
+        return power_map.get(self.entity_description.key)

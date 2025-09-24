@@ -2501,3 +2501,18 @@ function_parameters = {
         "REG_FUNCTION_ACTIVE_COOLING",
     ]
 }
+
+alarm_log_registers = [
+    {
+        "log_num": i,
+        "id": 15701 + (i - 1) * 10,
+        "state": 15702 + (i - 1) * 10,
+        "year": 15704 + (i - 1) * 10,
+        "month": 15705 + (i - 1) * 10,
+        "day": 15706 + (i - 1) * 10,
+        "hour": 15707 + (i - 1) * 10,
+        "minute": 15708 + (i - 1) * 10,
+        "second": 15709 + (i - 1) * 10,
+    }
+    for i in range(1, 21)
+]

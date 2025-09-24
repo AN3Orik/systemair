@@ -35,6 +35,12 @@
             },
             "heater_active": {
                 "name": "Нагреватель активен"
+            },
+            "heat_recovery_active": {
+                "name": "Рекуперация тепла активна"
+            },
+            "cool_recovery_active": {
+                "name": "Рекуперация холода активна"
             }
         },
         "climate": {
@@ -69,6 +75,12 @@
             },
             "time_delay_crowded": {
                 "name": "Многолюдно: Период"
+            },
+            "filter_period": {
+                "name": "Период замены фильтра"
+            },
+            "eco_mode_temperature_offset": {
+                "name": "Смещение температуры в Эко-режиме"
             }
         },
         "sensor": {
@@ -122,6 +134,9 @@
             },
             "total_power": {
                 "name": "Общее энергопотребление"
+            },
+            "alarm_history": {
+                "name": "История аварий"
             },
             "alarm_reg_alarm_frost_prot_alarm": {
                 "name": "Авария: Защита от замерзания"
@@ -209,6 +224,11 @@
                     "normal": "Обычный",
                     "hard": "Интенсивный"
                 }
+            }
+        },
+        "button": {
+            "reset_filter_timer": {
+                "name": "Сбросить таймер фильтра"
             }
         }
     }

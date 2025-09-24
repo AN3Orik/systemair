@@ -35,6 +35,12 @@
             },
             "heater_active": {
                 "name": "Heater active"
+            },
+            "heat_recovery_active": {
+                "name": "Heat Recovery Active"
+            },
+            "cool_recovery_active": {
+                "name": "Cool Recovery Active"
             }
         },
         "climate": {
@@ -69,6 +75,12 @@
             },
             "time_delay_crowded": {
                 "name": "Crowded: Time delay"
+            },
+            "filter_period": {
+                "name": "Filter Replacement Period"
+            },
+            "eco_mode_temperature_offset": {
+                "name": "Eco Mode Temperature Offset"
             }
         },
         "sensor": {
@@ -122,6 +134,9 @@
             },
             "total_power": {
                 "name": "Total Power Consumption"
+            },
+            "alarm_history": {
+                "name": "Alarm History"
             },
             "alarm_reg_alarm_frost_prot_alarm": {
                 "name": "Frost Protection Alarm"
@@ -209,6 +224,11 @@
                     "normal": "Normal",
                     "hard": "Hard"
                 }
+            }
+        },
+        "button": {
+            "reset_filter_timer": {
+                "name": "Reset Filter Timer"
             }
         }
     }
