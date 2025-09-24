@@ -90,7 +90,7 @@ The primary entity for controlling the unit.
 *   **Humidity:** Extract Air Relative Humidity.
 *   **Fan Speeds:** Supply & Extract Air Fan RPM, Supply & Extract Air Fan Regulated Speed (%).
 *   **Heater:** Heater Output Value (%).
-*   **Power (Calculated):** Supply Fan Power, Extract Fan Power, and Total Power Consumption (in Watts).
+*   **Power & Energy:** Supply Fan, Extract Fan, and Total Power/Energy consumption
 *   **Diagnostics:** Indoor Air Quality, Active Demand Controller, Defrosting State.
 *   **Filter:** Filter Remaining Time (in seconds).
 *   **Alarms:** Individual sensors for each possible alarm (e.g., Frost Protection, Filter Alarm) showing its current state.
@@ -118,7 +118,7 @@ The primary entity for controlling the unit.
 
 ## Lovelace Cards
 
-To get the best experience, it is recommended to also install the official Systemair Lovelace Cards pack, which provides specific way to display some information from integration (example: alarm history).
+To get the best experience, it is recommended to also install the Systemair Lovelace Cards pack, which provides specific way to display some information from integration (example: alarm history).
 
 1.  Open HACS and go to "Custom integrations". Enter the URL `https://github.com/AN3Orik/systemair-lovelace`, choose type Dashboard and click Add.
 2.  Find the "Systemair Lovelace Cards" in the list and click **Download**.
