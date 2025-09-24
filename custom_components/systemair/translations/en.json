@@ -135,6 +135,15 @@
             "total_power": {
                 "name": "Total Power Consumption"
             },
+            "supply_fan_energy": {
+                "name": "Supply Fan Energy"
+            },
+            "extract_fan_energy": {
+                "name": "Extract Fan Energy"
+            },
+            "total_energy": {
+                "name": "Total Energy Consumption"
+            },
             "alarm_history": {
                 "name": "Alarm History"
             },

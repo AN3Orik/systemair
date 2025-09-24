@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -15,10 +16,12 @@ from homeassistant.const import (
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
+    UnitOfEnergy,
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import MODEL_SPECS
 from .entity import SystemairEntity
@@ -30,11 +33,14 @@ from .modbus import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime, timedelta
+
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .coordinator import SystemairDataUpdateCoordinator
     from .data import SystemairConfigEntry
+
 
 YEAR_2000_THRESHOLD = 100
 
@@ -109,6 +115,40 @@ class SystemairSensorEntityDescription(SensorEntityDescription):
 class SystemairPowerSensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair power sensor entity."""
 
+
+@dataclass(kw_only=True, frozen=True)
+class SystemairEnergySensorEntityDescription(SensorEntityDescription):
+    """Describes a Systemair energy sensor entity."""
+
+    power_sensor_key: str
+
+
+ENERGY_SENSORS: tuple[SystemairEnergySensorEntityDescription, ...] = (
+    SystemairEnergySensorEntityDescription(
+        key="supply_fan_energy",
+        translation_key="supply_fan_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        power_sensor_key="supply_fan_power",
+    ),
+    SystemairEnergySensorEntityDescription(
+        key="extract_fan_energy",
+        translation_key="extract_fan_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        power_sensor_key="extract_fan_power",
+    ),
+    SystemairEnergySensorEntityDescription(
+        key="total_energy",
+        translation_key="total_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        power_sensor_key="total_power",
+    ),
+)
 
 POWER_SENSORS: tuple[SystemairPowerSensorEntityDescription, ...] = (
     SystemairPowerSensorEntityDescription(
@@ -268,14 +308,25 @@ async def async_setup_entry(
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
 
-    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS]
-    power_sensors = [SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS]
+    power_sensors_map = {desc.key: SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS}
 
-    async_add_entities(sensors + power_sensors)
+    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS]
+    power_sensors = list(power_sensors_map.values())
+
+    energy_sensors = [
+        SystemairEnergySensor(
+            coordinator=coordinator,
+            entity_description=desc,
+            power_sensor=power_sensors_map[desc.power_sensor_key],
+        )
+        for desc in ENERGY_SENSORS
+    ]
+
+    async_add_entities(sensors + power_sensors + energy_sensors)
 
 
 class SystemairSensor(SystemairEntity, SensorEntity):
-    """Systemair Sensor class."""
+    """Systemair Sensor class for all sensors."""
 
     _attr_has_entity_name = True
     entity_description: SystemairSensorEntityDescription
@@ -426,3 +477,62 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         }
 
         return power_map.get(self.entity_description.key)
+
+
+class SystemairEnergySensor(SystemairEntity, RestoreSensor):
+    """Systemair Energy Sensor class."""
+
+    _attr_has_entity_name = True
+    entity_description: SystemairEnergySensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: SystemairDataUpdateCoordinator,
+        entity_description: SystemairEnergySensorEntityDescription,
+        power_sensor: SystemairPowerSensor,
+    ) -> None:
+        """Initialize the energy sensor."""
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+        self._power_sensor = power_sensor
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
+        self._last_update: datetime | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity which provides long-term statistics."""
+        await super().async_added_to_hass()
+
+        last_sensor_data = await self.async_get_last_sensor_data()
+        if last_sensor_data:
+            self._attr_native_value = last_sensor_data.native_value
+
+        if (
+            (last_state := await self.async_get_last_state())
+            and "last_update" in last_state.attributes
+            and last_state.attributes["last_update"] is not None
+        ):
+            self._last_update = dt_util.parse_datetime(last_state.attributes["last_update"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes."""
+        return {"last_update": self._last_update.isoformat() if self._last_update else None}
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        now = dt_util.utcnow()
+        power_w = self._power_sensor.native_value
+
+        if power_w is None or self._last_update is None:
+            self._last_update = now
+            self.async_write_ha_state()
+            return
+
+        time_delta: timedelta = now - self._last_update
+        energy_increment_kwh = (power_w / 1000) * (time_delta.total_seconds() / 3600)
+
+        current_value = self.native_value or 0
+        self._attr_native_value = round(current_value + energy_increment_kwh, 4)
+
+        self._last_update = now
+        self.async_write_ha_state()
