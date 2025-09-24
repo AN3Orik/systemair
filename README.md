@@ -120,8 +120,6 @@ The primary entity for controlling the unit.
 
 To get the best experience, it is recommended to also install the official Systemair Lovelace Cards pack, which provides specific way to display some information from integration (example: alarm history).
 
-1.  Go to **HACS > Frontend**.
-2.  Click the three dots in the top right and select **Custom repositories**.
-3.  Add the URL to the card repository: `https://github.com/AN3Orik/systemair-lovelace` and select the category **Dashboard**.
-4.  Find the "Systemair Lovelace Cards" in the list and click **Download**.
-5.  Follow the instructions to add the card to your dashboard.
+1.  Open HACS and go to "Custom integrations". Enter the URL `https://github.com/AN3Orik/systemair-lovelace`, choose type Dashboard and click Add.
+2.  Find the "Systemair Lovelace Cards" in the list and click **Download**.
+3.  Follow the instructions to add the card to your dashboard.
