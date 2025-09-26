@@ -3,6 +3,7 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-blue.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/releases)
 [![GitHub License](https://img.shields.io/github/license/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/blob/main/LICENSE)
+[![TIP](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg?style=for-the-badge)](https://dalink.to/an3orik)
 
 This Home Assistant integration allows you to monitor and control **Systemair SAVE** ventilation units through your local network. It communicates directly with the **Systemair IAM ([Internet Access Module](https://www.systemair.com/en-gb/p/internet-access-module-iam-110534))** or any other ModBus TCP-RTU module via the Modbus TCP protocol.
 
