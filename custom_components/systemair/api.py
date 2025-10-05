@@ -294,6 +294,7 @@ class SystemairWebApiClient(SystemairClientBase):
         """Systemair API Client."""
         self._address = address
         self._session = session
+        self._lock = asyncio.Lock()
 
     async def async_test_connection(self) -> Any:
         """Test connection to API (legacy method for compatibility)."""
@@ -315,43 +316,71 @@ class SystemairWebApiClient(SystemairClientBase):
 
     async def async_get_data(self, reg: list[ModbusParameter]) -> Any:
         """Read modbus registers."""
-        query_params = ",".join(f"%22{item.register - 1}%22:1" for item in reg)
-        url = f"http://{self._address}/mread?{{{query_params}}}"
-        return await self._api_wrapper(method="get", url=url)
+        async with self._lock:
+            query_params = ",".join(f"%22{item.register - 1}%22:1" for item in reg)
+            url = f"http://{self._address}/mread?{{{query_params}}}"
+            return await self._api_wrapper(method="get", url=url)
 
     async def async_set_data(self, registry: ModbusParameter, value: int) -> Any:
         """Write data to the API."""
-        query_params = f"%22{registry.register - 1}%22:{value}"
-        url = f"http://{self._address}/mwrite?{{{query_params}}}"
-        return await self._api_wrapper(method="get", url=url)
+        async with self._lock:
+            query_params = f"%22{registry.register - 1}%22:{value}"
+            url = f"http://{self._address}/mwrite?{{{query_params}}}"
+            return await self._api_wrapper(method="get", url=url)
 
     async def write_register(self, address_1based: int, value: int) -> None:
         """Write a single holding register (compatibility with Modbus TCP client)."""
-        query_params = f"%22{address_1based - 1}%22:{value}"
-        url = f"http://{self._address}/mwrite?{{{query_params}}}"
-        await self._api_wrapper(method="get", url=url)
+        async with self._lock:
+            query_params = f"%22{address_1based - 1}%22:{value}"
+            url = f"http://{self._address}/mwrite?{{{query_params}}}"
+            await self._api_wrapper(method="get", url=url)
 
     async def write_registers_32bit(self, address_1based: int, value: int) -> None:
         """Write a 32-bit value across two registers (compatibility with Modbus TCP client)."""
-        low_word = value & 0xFFFF
-        high_word = (value >> 16) & 0xFFFF
+        async with self._lock:
+            low_word = value & 0xFFFF
+            high_word = (value >> 16) & 0xFFFF
 
-        # Write both registers: low word first, then high word
-        query_params = f"%22{address_1based - 1}%22:{low_word},%22{address_1based}%22:{high_word}"
-        url = f"http://{self._address}/mwrite?{{{query_params}}}"
-        await self._api_wrapper(method="get", url=url)
+            # Write both registers: low word first, then high word
+            query_params = f"%22{address_1based - 1}%22:{low_word},%22{address_1based}%22:{high_word}"
+            url = f"http://{self._address}/mwrite?{{{query_params}}}"
+            await self._api_wrapper(method="get", url=url)
 
     async def get_all_data(self) -> dict[str, Any]:
         """Get all data from device (compatibility with Modbus TCP client)."""
-        # Build list of all registers we need to query
-        all_regs = []
-        for start, count in READ_BLOCKS:
-            for offset in range(count):
-                reg_addr = start - 1 + offset
-                all_regs.append(reg_addr)
+        async with self._lock:
+            # Read data in blocks to avoid URL length limit (max ~2000 chars)
+            tasks = []
+            for start, count in READ_BLOCKS:
+                tasks.append(self._read_block(start, count))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            all_registers = {}
+            has_successful_read = False
+
+            for i, result in enumerate(results):
+                start_addr_1based, _ = READ_BLOCKS[i]
+                if isinstance(result, Exception):
+                    LOGGER.error(f"Failed to read block {start_addr_1based}: {result}")
+                    continue
+
+                has_successful_read = True
+                all_registers.update(result)
+
+            if not has_successful_read:
+                msg = "Failed to read any data blocks from the device."
+                raise ModbusConnectionError(msg)
+
+            return all_registers
+
+    async def _read_block(self, start: int, count: int) -> dict[str, Any]:
+        """Read a single block of registers."""
+        # Build list of registers for this block
+        regs = [start - 1 + offset for offset in range(count)]
 
         # Build query params
-        query_params = ",".join(f"%22{reg}%22:1" for reg in all_regs)
+        query_params = ",".join(f"%22{reg}%22:1" for reg in regs)
         url = f"http://{self._address}/mread?{{{query_params}}}"
 
         try:
@@ -359,7 +388,7 @@ class SystemairWebApiClient(SystemairClientBase):
             # Convert result to match Modbus TCP format (string keys)
             return {str(k): v for k, v in result.items()}
         except SystemairApiClientError as e:
-            msg = f"Failed to read data from Web API: {e}"
+            msg = f"Failed to read block starting at {start}: {e}"
             raise ModbusConnectionError(msg) from e
 
     async def _parse_response(self, response: aiohttp.ClientResponse, *, retry: bool) -> Any:
@@ -387,10 +416,12 @@ class SystemairWebApiClient(SystemairClientBase):
         data: dict | None = None,
         headers: dict | None = None,
     ) -> Any:
-        """Get information from the API."""
-        retries = 3
-        try:
-            for attempt in range(retries):
+        """Get information from the API with robust retry logic."""
+        max_retries = 5
+        base_delay = 0.2
+
+        for attempt in range(max_retries):
+            try:
                 async with async_timeout.timeout(10):
                     response = await self._session.request(
                         method=method,
@@ -398,28 +429,60 @@ class SystemairWebApiClient(SystemairClientBase):
                         headers=headers,
                         json=data,
                     )
-                    response = await self._parse_response(response, retry=attempt < retries - 1)
-                    if response is None:
-                        continue
-                    return response
+                    parsed_response = await self._parse_response(response, retry=attempt < max_retries - 1)
 
-        except TimeoutError as exception:
-            msg = f"Timeout error fetching information - {exception}"
-            raise SystemairApiClientCommunicationError(
-                msg,
-            ) from exception
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            msg = f"Error fetching information - {exception}"
-            raise SystemairApiClientCommunicationError(
-                msg,
-            ) from exception
-        except SystemairApiClientCommunicationError as exception:
-            msg = f"Received mb disconnect - {exception}"
-            raise SystemairApiClientError(
-                msg,
-            ) from exception
-        except Exception as exception:  # pylint: disable=broad-except
-            msg = f"Something really wrong happened! - {exception}"
-            raise SystemairApiClientError(
-                msg,
-            ) from exception
+                    if parsed_response is None:
+                        # MB DISCONNECTED - retry with exponential backoff
+                        delay = base_delay * (2**attempt)
+                        LOGGER.debug(
+                            "Device disconnected on attempt %d/%d. Retrying in %.2fs...",
+                            attempt + 1,
+                            max_retries,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    return parsed_response
+
+            except TimeoutError as exception:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    LOGGER.warning(
+                        "Timeout on attempt %d/%d: %s. Retrying in %.2fs...",
+                        attempt + 1,
+                        max_retries,
+                        exception,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                msg = f"Timeout error after {max_retries} attempts - {exception}"
+                raise SystemairApiClientCommunicationError(msg) from exception
+
+            except (aiohttp.ClientError, socket.gaierror) as exception:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    LOGGER.warning(
+                        "Connection error on attempt %d/%d: %s. Retrying in %.2fs...",
+                        attempt + 1,
+                        max_retries,
+                        exception,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                msg = f"Connection error after {max_retries} attempts - {exception}"
+                raise SystemairApiClientCommunicationError(msg) from exception
+
+            except SystemairApiClientCommunicationError:
+                # Don't retry on MB DISCONNECTED if we've exhausted retries
+                raise
+
+            except Exception as exception:  # pylint: disable=broad-except
+                LOGGER.error("Unexpected error during API request: %s", exception, exc_info=True)
+                msg = f"Unexpected error - {exception}"
+                raise SystemairApiClientError(msg) from exception
+
+        msg = f"Failed to execute API request after {max_retries} attempts"
+        raise SystemairApiClientError(msg)
