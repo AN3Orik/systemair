@@ -14,16 +14,28 @@ from .api import (
     SystemairApiClientCommunicationError,
     SystemairApiClientError,
     SystemairModbusClient,
+    SystemairSerialClient,
     SystemairWebApiClient,
 )
 from .const import (
+    API_TYPE_MODBUS_SERIAL,
     API_TYPE_MODBUS_TCP,
     API_TYPE_MODBUS_WEBAPI,
     CONF_API_TYPE,
+    CONF_BAUDRATE,
+    CONF_BYTESIZE,
     CONF_MODEL,
+    CONF_PARITY,
+    CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
+    CONF_STOPBITS,
+    DEFAULT_BAUDRATE,
+    DEFAULT_BYTESIZE,
+    DEFAULT_PARITY,
     DEFAULT_PORT,
+    DEFAULT_SERIAL_PORT,
     DEFAULT_SLAVE_ID,
+    DEFAULT_STOPBITS,
     DOMAIN,
     LOGGER,
     MODEL_SPECS,
@@ -58,6 +70,24 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             msg = "Failed to connect"
             raise ModbusConnectionError(msg)
 
+    async def _validate_serial_connection(self, user_input: dict) -> None:
+        """Validate the connection to the unit via Modbus Serial."""
+        client = SystemairSerialClient(
+            port=user_input[CONF_SERIAL_PORT],
+            baudrate=user_input[CONF_BAUDRATE],
+            bytesize=user_input[CONF_BYTESIZE],
+            parity=user_input[CONF_PARITY],
+            stopbits=user_input[CONF_STOPBITS],
+            slave_id=user_input[CONF_SLAVE_ID],
+        )
+        try:
+            await client.start()
+            if not await client.test_connection():
+                msg = "Failed to connect"
+                raise ModbusConnectionError(msg)
+        finally:
+            await client.stop()
+
     async def _validate_webapi_connection(self, user_input: dict) -> dict[str, str]:
         """Validate the connection via Web API and return device info."""
         client = SystemairWebApiClient(
@@ -79,6 +109,8 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if self._api_type == API_TYPE_MODBUS_TCP:
                 return await self.async_step_modbus_tcp()
+            if self._api_type == API_TYPE_MODBUS_SERIAL:
+                return await self.async_step_modbus_serial()
             return await self.async_step_modbus_webapi()
 
         return self.async_show_form(
@@ -90,6 +122,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             options=[
                                 selector.SelectOptionDict(value=API_TYPE_MODBUS_TCP, label="Modbus TCP"),
                                 selector.SelectOptionDict(value=API_TYPE_MODBUS_WEBAPI, label="Modbus WebAPI (HTTP)"),
+                                selector.SelectOptionDict(value=API_TYPE_MODBUS_SERIAL, label="Modbus Serial (RS485)"),
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
@@ -124,6 +157,74 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST): selector.TextSelector(),
                     vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
+                    vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
+                    vol.Required(CONF_MODEL, default=next(iter(MODEL_SPECS))): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=list(MODEL_SPECS.keys()),
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_modbus_serial(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        """Handle Modbus Serial configuration."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                await self._validate_serial_connection(user_input)
+            except ModbusConnectionError as e:
+                LOGGER.error("Failed to connect to VSR unit via Serial: %s", e)
+                errors["base"] = "cannot_connect"
+            except (TimeoutError, OSError) as e:
+                LOGGER.exception("Unexpected exception: %s", e)
+                errors["base"] = "unknown"
+            else:
+                unique_id = f"serial_{user_input[CONF_SERIAL_PORT]}"
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
+
+                user_input[CONF_API_TYPE] = API_TYPE_MODBUS_SERIAL
+
+                # Convert string values to integers for bytesize and stopbits
+                user_input[CONF_BYTESIZE] = int(user_input[CONF_BYTESIZE])
+                user_input[CONF_STOPBITS] = int(user_input[CONF_STOPBITS])
+
+                return self.async_create_entry(
+                    title=f"Serial {user_input[CONF_SERIAL_PORT]}",
+                    data=user_input,
+                )
+
+        return self.async_show_form(
+            step_id="modbus_serial",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SERIAL_PORT, default=DEFAULT_SERIAL_PORT): selector.TextSelector(),
+                    vol.Required(CONF_BAUDRATE, default=DEFAULT_BAUDRATE): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
+                    vol.Required(CONF_BYTESIZE, default=DEFAULT_BYTESIZE): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["7", "8"],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Required(CONF_PARITY, default=DEFAULT_PARITY): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["N", "E", "O"],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Required(CONF_STOPBITS, default=DEFAULT_STOPBITS): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["1", "2"],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
                     vol.Required(CONF_MODEL, default=next(iter(MODEL_SPECS))): selector.SelectSelector(
                         selector.SelectSelectorConfig(

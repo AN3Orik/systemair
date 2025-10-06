@@ -8,7 +8,7 @@ from typing import Any, NoReturn
 
 import aiohttp
 import async_timeout
-from pymodbus.client import AsyncModbusTcpClient
+from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
 from .const import LOGGER
@@ -20,6 +20,7 @@ __all__ = [
     "SystemairApiClientError",
     "SystemairClientBase",
     "SystemairModbusClient",
+    "SystemairSerialClient",
     "SystemairWebApiClient",
 ]
 
@@ -275,6 +276,252 @@ class SystemairModbusClient(SystemairClientBase):
             for offset, reg_val in enumerate(result):
                 key = str(start_addr_1based - 1 + offset)
                 all_registers[key] = reg_val
+
+        if not has_successful_read:
+            msg = "Failed to read any data blocks from the device."
+            raise ModbusConnectionError(msg)
+
+        return all_registers
+
+
+class SystemairSerialClient(SystemairClientBase):
+    """Provides a client for interacting with a Systemair unit via Modbus Serial (RS485)."""
+
+    def __init__(  # noqa: PLR0913
+        self,
+        port: str,
+        baudrate: int = 9600,
+        bytesize: int = 8,
+        parity: str = "N",
+        stopbits: int = 1,
+        slave_id: int = 1,
+    ) -> None:
+        """Initialize Modbus Serial client."""
+        self._port = port
+        self._baudrate = baudrate
+        self._bytesize = bytesize
+        self._parity = parity
+        self._stopbits = stopbits
+        self._slave_id = slave_id
+        self._client: AsyncModbusSerialClient | None = None
+        self._lock = asyncio.Lock()
+        self._is_running = False
+        self._worker_task: asyncio.Task | None = None
+        self._request_queue: asyncio.Queue = asyncio.Queue()
+
+    async def start(self) -> None:
+        """Start the Modbus Serial client and worker task."""
+        if self._is_running:
+            LOGGER.debug("Serial client already running.")
+            return
+
+        self._is_running = True
+        LOGGER.debug(
+            "Initializing Modbus Serial client: port=%s, baudrate=%d, bytesize=%d, parity=%s, stopbits=%d, slave=%d",
+            self._port,
+            self._baudrate,
+            self._bytesize,
+            self._parity,
+            self._stopbits,
+            self._slave_id,
+        )
+
+        # Start worker task
+        self._worker_task = asyncio.create_task(self._modbus_worker())
+        LOGGER.info("Modbus Serial client started on %s", self._port)
+
+    async def stop(self) -> None:
+        """Stop the Modbus Serial client and close connection."""
+        if not self._is_running:
+            return
+
+        LOGGER.debug("Stopping Modbus Serial client...")
+        self._is_running = False
+
+        # Cancel worker task
+        if self._worker_task:
+            self._worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._worker_task
+            self._worker_task = None
+
+        await self._close_connection()
+        LOGGER.info("Modbus Serial client stopped.")
+
+    async def _ensure_connection(self) -> None:
+        """Ensure the Modbus Serial connection is established."""
+        if self._client and self._client.connected:
+            return
+
+        LOGGER.debug("Establishing Modbus Serial connection on %s...", self._port)
+        self._client = AsyncModbusSerialClient(
+            port=self._port,
+            baudrate=self._baudrate,
+            bytesize=self._bytesize,
+            parity=self._parity,
+            stopbits=self._stopbits,
+            timeout=10,
+        )
+
+        result = await self._client.connect()
+        if not result:
+            msg = f"Failed to connect to Modbus Serial device on {self._port}"
+            raise ModbusConnectionError(msg)
+
+        LOGGER.info("Modbus Serial connected on %s", self._port)
+
+    async def _close_connection(self) -> None:
+        """Close the Modbus Serial connection."""
+        if self._client:
+            LOGGER.debug("Closing Modbus Serial connection...")
+            self._client.close()
+            self._client = None
+
+    def _raise_unrecoverable_modbus_error(self, result: Any) -> NoReturn:
+        """Raise an error for unrecoverable Modbus exceptions."""
+        msg = f"Modbus error code {result.exception_code}"
+        raise ModbusConnectionError(msg)
+
+    def _raise_unknown_request_type(self, request_type: str) -> NoReturn:
+        """Raise an error for unknown request type."""
+        msg = f"Unknown request type: {request_type}"
+        raise ValueError(msg)
+
+    async def _execute_request(self, request_type: str, address: int, **kwargs: Any) -> Any:
+        """Execute a Modbus request with retry logic and exponential backoff."""
+        max_retries = 5
+        base_delay = 0.2
+
+        for attempt in range(max_retries):
+            delay = base_delay * (2**attempt)
+
+            try:
+                await self._ensure_connection()
+
+                if request_type == "read":
+                    count = kwargs.get("count", 1)
+                    result = await self._client.read_holding_registers(address, count, slave=self._slave_id)
+                elif request_type == "write":
+                    value = kwargs["value"]
+                    result = await self._client.write_register(address, value, slave=self._slave_id)
+                elif request_type == "write_multiple":
+                    values = kwargs["values"]
+                    result = await self._client.write_registers(address, values, slave=self._slave_id)
+                else:
+                    self._raise_unknown_request_type(request_type)
+
+                if result.isError():
+                    exception_code = getattr(result, "exception_code", None)
+                    if exception_code in {MODBUS_DEVICE_BUSY_EXCEPTION, MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND}:
+                        LOGGER.debug(
+                            "Device busy/unresponsive (code %s) on %s. Retrying in %.2fs...",
+                            result.exception_code,
+                            request_type,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        self._raise_unrecoverable_modbus_error(result)
+                else:
+                    return result
+
+            except (TimeoutError, ConnectionException, ModbusConnectionError) as e:
+                LOGGER.warning("Connection error during %s: %s. Attempting to reconnect...", request_type, e)
+                await self._close_connection()
+                await asyncio.sleep(delay)
+
+            except Exception as e:
+                LOGGER.error("Unexpected error during Modbus %s: %s", request_type, e, exc_info=True)
+                raise
+
+        msg = f"Failed to execute Modbus {request_type} after {max_retries} attempts."
+        raise ModbusConnectionError(msg)
+
+    async def _modbus_worker(self) -> None:
+        """Process requests from the queue."""
+        while self._is_running:
+            try:
+                request_type, address, future, kwargs = await self._request_queue.get()
+
+                try:
+                    result = await self._execute_request(request_type, address, **kwargs)
+                    future.set_result(result)
+                except (ModbusConnectionError, ValueError) as e:
+                    future.set_exception(e)
+                finally:
+                    self._request_queue.task_done()
+            except asyncio.CancelledError:
+                break
+        LOGGER.debug("Modbus Serial worker shutting down.")
+
+    async def _queue_request(self, request_type: str, address: int, **kwargs: Any) -> Any:
+        """Add a request to the queue and wait for its completion."""
+        if not self._is_running:
+            msg = "Serial client is not running. Call start() first."
+            raise ModbusConnectionError(msg)
+
+        future = asyncio.Future()
+        self._request_queue.put_nowait((request_type, address, future, kwargs))
+        return await future
+
+    async def write_register(self, address_1based: int, value: int) -> None:
+        """Queue a write request for a single holding register."""
+        result = await self._queue_request("write", address_1based - 1, value=value)
+        if result.isError():
+            msg = f"Failed to write register {address_1based}"
+            raise ModbusConnectionError(msg)
+
+    async def write_registers_32bit(self, address_1based: int, value: int) -> None:
+        """Queue a write request for a 32-bit value across two registers."""
+        low_word = value & 0xFFFF
+        high_word = (value >> 16) & 0xFFFF
+        result = await self._queue_request("write_multiple", address_1based - 1, values=[low_word, high_word])
+        if result.isError():
+            msg = f"Failed to write 32-bit value to registers {address_1based}-{address_1based + 1}"
+            raise ModbusConnectionError(msg)
+
+    async def test_connection(self) -> bool:
+        """Test connection to the Modbus Serial device."""
+        try:
+            await self._ensure_connection()
+            # Try to read a single register to verify communication
+            result = await self._client.read_holding_registers(0, 1, slave=self._slave_id)
+            return not result.isError()
+        except (ModbusConnectionError, ConnectionException) as e:
+            LOGGER.error("Serial connection test failed: %s", e)
+            return False
+        except OSError as e:
+            LOGGER.error("Serial port error during connection test: %s", e)
+            return False
+
+    async def get_all_data(self) -> dict[str, Any]:
+        """Get all data from device by reading all defined register blocks."""
+        all_registers: dict[str, Any] = {}
+        has_successful_read = False
+
+        for start_address_1based, count in READ_BLOCKS:
+            try:
+                result = await self._queue_request("read", start_address_1based - 1, count=count)
+
+                if result.isError():
+                    LOGGER.debug("Failed to read block at %d: error", start_address_1based)
+                    continue
+
+                has_successful_read = True
+                registers = result.registers
+
+                # Map register values to parameter names
+                for reg_addr in range(start_address_1based, start_address_1based + count):
+                    key = str(reg_addr)
+                    reg_val = registers[reg_addr - start_address_1based]
+                    all_registers[key] = reg_val
+
+            except ModbusConnectionError as e:
+                LOGGER.debug("Error reading block at %d: %s", start_address_1based, e)
+                continue
+            except (TimeoutError, ConnectionException) as e:
+                LOGGER.debug("Connection error reading block at %d: %s", start_address_1based, e)
+                continue
 
         if not has_successful_read:
             msg = "Failed to read any data blocks from the device."

@@ -17,6 +17,20 @@ DEFAULT_SLAVE_ID = 1
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"
 API_TYPE_MODBUS_WEBAPI = "modbus_webapi"
+API_TYPE_MODBUS_SERIAL = "modbus_serial"
+
+# --- Serial Port Configuration ---
+CONF_SERIAL_PORT = "port"
+CONF_BAUDRATE = "baudrate"
+CONF_BYTESIZE = "bytesize"
+CONF_PARITY = "parity"
+CONF_STOPBITS = "stopbits"
+
+DEFAULT_SERIAL_PORT = "/dev/ttyUSB0"
+DEFAULT_BAUDRATE = 19200
+DEFAULT_BYTESIZE = 8
+DEFAULT_STOPBITS = 1
+DEFAULT_PARITY = "N"
 
 # --- Power Specs for different models ---
 MODEL_SPECS = {
