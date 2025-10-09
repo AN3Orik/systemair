@@ -13,15 +13,20 @@ class SystemairEntity(CoordinatorEntity[SystemairDataUpdateCoordinator]):
     """SystemairEntity class."""
 
     _attr_attribution = ATTRIBUTION
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: SystemairDataUpdateCoordinator) -> None:
         """Initialize."""
         super().__init__(coordinator)
         self._attr_unique_id = coordinator.config_entry.entry_id
 
+        # Get model from user selection or device info
+        model = coordinator.config_entry.runtime_data.model or coordinator.config_entry.runtime_data.mb_model
+
         device_info_dict = {
+            "name": f"Systemair {model}" if model else "Systemair VSR",
             "manufacturer": "Systemair",
-            "model": coordinator.config_entry.runtime_data.mb_model,
+            "model": model,
             "hw_version": coordinator.config_entry.runtime_data.mb_hw_version,
             "sw_version": coordinator.config_entry.runtime_data.mb_sw_version,
             "serial_number": coordinator.config_entry.runtime_data.serial_number,

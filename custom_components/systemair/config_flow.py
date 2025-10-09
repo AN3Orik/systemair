@@ -149,7 +149,10 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_TCP
-                return self.async_create_entry(title=user_input[CONF_HOST], data=user_input)
+                return self.async_create_entry(
+                    title=user_input.get(CONF_MODEL, user_input[CONF_HOST]),
+                    data=user_input,
+                )
 
         return self.async_show_form(
             step_id="modbus_tcp",
@@ -193,7 +196,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input[CONF_STOPBITS] = int(user_input[CONF_STOPBITS])
 
                 return self.async_create_entry(
-                    title=f"Serial {user_input[CONF_SERIAL_PORT]}",
+                    title=user_input.get(CONF_MODEL, f"Serial {user_input[CONF_SERIAL_PORT]}"),
                     data=user_input,
                 )
 
@@ -254,12 +257,14 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_WEBAPI
-                # Set model from device if not manually selected
+                
+                # Use device model if user didn't select one manually
                 if CONF_MODEL not in user_input or not user_input[CONF_MODEL]:
                     user_input[CONF_MODEL] = device_info.get("model", next(iter(MODEL_SPECS)))
-
+                
+                # Title is always the selected/detected model
                 return self.async_create_entry(
-                    title=device_info.get("model", user_input[CONF_IP_ADDRESS]),
+                    title=user_input[CONF_MODEL],
                     data=user_input,
                 )
 
@@ -295,6 +300,13 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
+            # Update the integration title to match selected model
+            new_model = user_input.get(CONF_MODEL)
+            if new_model:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    title=new_model,
+                )
             return self.async_create_entry(title="", data=user_input)
 
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))

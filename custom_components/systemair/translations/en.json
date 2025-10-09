@@ -3,17 +3,45 @@
         "step": {
             "user": {
                 "title": "Connect to Systemair Unit",
-                "description": "Enter the connection details for your Systemair IAM module. Press Submit to check the connection.",
+                "description": "Select the connection type for your Systemair ventilation unit.",
+                "data": {
+                    "api_type": "Connection Type"
+                }
+            },
+            "modbus_tcp": {
+                "title": "Modbus TCP Configuration",
+                "description": "Enter the IP address of your Systemair IAM module. The device must be accessible via Modbus TCP.",
                 "data": {
                     "host": "IP Address",
                     "port": "Port",
                     "slave_id": "Slave ID",
                     "model": "Ventilation Unit Model"
                 }
+            },
+            "modbus_serial": {
+                "title": "Modbus Serial (RS485) Configuration",
+                "description": "Enter the serial port details for your USB-RS485 converter connected to the Systemair unit.",
+                "data": {
+                    "port": "Serial Port",
+                    "baudrate": "Baud Rate",
+                    "bytesize": "Data Bits",
+                    "parity": "Parity",
+                    "stopbits": "Stop Bits",
+                    "slave_id": "Slave ID",
+                    "model": "Ventilation Unit Model"
+                }
+            },
+            "modbus_webapi": {
+                "title": "Modbus WebAPI Configuration",
+                "description": "Enter the IP address of your Systemair SAVECONNECT 2.0 module. The device info will be retrieved automatically.",
+                "data": {
+                    "ip_address": "IP Address",
+                    "model": "Ventilation Unit Model (optional)"
+                }
             }
         },
         "error": {
-            "cannot_connect": "Unable to connect to the device. Please check the IP address, port, and that the device is online.",
+            "cannot_connect": "Unable to connect to the device. Please check the connection details and ensure the device is online.",
             "unknown": "An unknown error occurred.",
             "already_configured": "This device is already configured."
         }
@@ -45,7 +73,7 @@
         },
         "climate": {
             "saveconnect": {
-                "name": "Unit",
+                "name": "Climate",
                 "state_attributes": {
                     "preset_mode": {
                         "state": {
