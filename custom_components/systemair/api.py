@@ -543,6 +543,11 @@ class SystemairWebApiClient(SystemairClientBase):
         self._session = session
         self._lock = asyncio.Lock()
 
+    @property
+    def address(self) -> str:
+        """Return the device address."""
+        return self._address
+
     async def async_test_connection(self) -> Any:
         """Test connection to API (legacy method for compatibility)."""
         return await self.test_connection()

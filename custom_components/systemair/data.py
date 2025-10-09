@@ -32,3 +32,4 @@ class SystemairData:
     mb_sw_version: str | None = None
     serial_number: str | None = None
     mac_address: str | None = None
+    configuration_url: str | None = None

@@ -144,6 +144,10 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.config_entry.runtime_data.mb_sw_version = unit_version["MB SW version"]
             self.config_entry.runtime_data.iam_sw_version = unit_version["IAM SW version"]
 
+            # Set configuration URL for web interface access
+            if hasattr(self.client, "address"):
+                self.config_entry.runtime_data.configuration_url = f"http://{self.client.address}"
+
             # Required for setup of climate entity
             self.register_modbus_parameters(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
             self.register_modbus_parameters(parameter_map["REG_FUNCTION_ACTIVE_COOLER"])
