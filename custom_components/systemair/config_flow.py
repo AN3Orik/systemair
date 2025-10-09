@@ -257,11 +257,11 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_WEBAPI
-                
+
                 # Use device model if user didn't select one manually
                 if CONF_MODEL not in user_input or not user_input[CONF_MODEL]:
                     user_input[CONF_MODEL] = device_info.get("model", next(iter(MODEL_SPECS)))
-                
+
                 # Title is always the selected/detected model
                 return self.async_create_entry(
                     title=user_input[CONF_MODEL],
