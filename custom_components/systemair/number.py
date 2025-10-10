@@ -98,6 +98,68 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         registry=parameter_map["REG_ECO_T_Y1_OFFSET"],
     ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_outdoor_low_limit",
+        translation_key="free_cooling_outdoor_low_limit",
+        entity_category=EntityCategory.CONFIG,
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_step=0.1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        registry=parameter_map["REG_FREE_COOLING_OUTDOOR_NIGHTTIME_DEACTIVATION_LOW_T_LIMIT"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_outdoor_high_limit",
+        translation_key="free_cooling_outdoor_high_limit",
+        entity_category=EntityCategory.CONFIG,
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_step=0.1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        registry=parameter_map["REG_FREE_COOLING_OUTDOOR_NIGHTTIME_DEACTIVATION_HIGH_T_LIMIT"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_room_cancel_temp",
+        translation_key="free_cooling_room_cancel_temp",
+        entity_category=EntityCategory.CONFIG,
+        device_class=NumberDeviceClass.TEMPERATURE,
+        native_step=0.1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        registry=parameter_map["REG_FREE_COOLING_ROOM_CANCEL_T"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_start_time_hours",
+        translation_key="free_cooling_start_time_hours",
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        mode=NumberMode.BOX,
+        registry=parameter_map["REG_FREE_COOLING_START_TIME_H"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_start_time_minutes",
+        translation_key="free_cooling_start_time_minutes",
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        mode=NumberMode.BOX,
+        registry=parameter_map["REG_FREE_COOLING_START_TIME_M"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_end_time_hours",
+        translation_key="free_cooling_end_time_hours",
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        mode=NumberMode.BOX,
+        registry=parameter_map["REG_FREE_COOLING_END_TIME_H"],
+    ),
+    SystemairNumberEntityDescription(
+        key="free_cooling_end_time_minutes",
+        translation_key="free_cooling_end_time_minutes",
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        mode=NumberMode.BOX,
+        registry=parameter_map["REG_FREE_COOLING_END_TIME_M"],
+    ),
 )
 
 
@@ -119,8 +181,6 @@ async def async_setup_entry(
 class SystemairNumber(SystemairEntity, NumberEntity):
     """Representation of a Systemair Number."""
 
-    _attr_has_entity_name = True
-
     entity_description: SystemairNumberEntityDescription
 
     def __init__(
@@ -133,8 +193,11 @@ class SystemairNumber(SystemairEntity, NumberEntity):
 
         self.entity_description = entity_description
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
-        self.native_min_value = float(entity_description.registry.min_value or 0)
-        self.native_max_value = float(entity_description.registry.max_value or 100)
+
+        # Apply scale_factor to min/max values if present
+        scale_factor = entity_description.registry.scale_factor or 1
+        self.native_min_value = float(entity_description.registry.min_value or 0) / scale_factor
+        self.native_max_value = float(entity_description.registry.max_value or 100) / scale_factor
 
     @property
     def native_value(self) -> float:

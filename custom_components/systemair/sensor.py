@@ -328,7 +328,6 @@ async def async_setup_entry(
 class SystemairSensor(SystemairEntity, SensorEntity):
     """Systemair Sensor class for all sensors."""
 
-    _attr_has_entity_name = True
     entity_description: SystemairSensorEntityDescription
 
     _KEY_TO_MAP: ClassVar[dict[str, dict[int, str]]] = {
@@ -423,7 +422,6 @@ class SystemairSensor(SystemairEntity, SensorEntity):
 class SystemairPowerSensor(SystemairEntity, SensorEntity):
     """Systemair Power Sensor class for calculated values."""
 
-    _attr_has_entity_name = True
     entity_description: SystemairPowerSensorEntityDescription
 
     def __init__(
@@ -482,7 +480,6 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
 class SystemairEnergySensor(SystemairEntity, RestoreSensor):
     """Systemair Energy Sensor class."""
 
-    _attr_has_entity_name = True
     entity_description: SystemairEnergySensorEntityDescription
 
     def __init__(

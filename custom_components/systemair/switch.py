@@ -31,12 +31,14 @@ ENTITY_DESCRIPTIONS = (
     SystemairSwitchEntityDescription(
         key="eco_mode",
         translation_key="eco_mode",
+        entity_category=EntityCategory.CONFIG,
         icon="mdi:leaf",
         registry=parameter_map["REG_ECO_MODE_ON_OFF"],
     ),
     SystemairSwitchEntityDescription(
         key="free_cooling",
         translation_key="free_cooling",
+        entity_category=EntityCategory.CONFIG,
         icon="mdi:snowflake",
         registry=parameter_map["REG_FREE_COOLING_ON_OFF"],
     ),
@@ -67,8 +69,6 @@ async def async_setup_entry(
 
 class SystemairSwitch(SystemairEntity, SwitchEntity):
     """Systemair switch class."""
-
-    _attr_has_entity_name = True
 
     entity_description: SystemairSwitchEntityDescription
 

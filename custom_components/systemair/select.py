@@ -69,6 +69,30 @@ ENTITY_DESCRIPTIONS = (
             2: "hard",
         },
     ),
+    SystemairSelectEntityDescription(
+        key="free_cooling_supply_fan_level",
+        translation_key="free_cooling_supply_fan_level",
+        icon="mdi:fan",
+        entity_category=EntityCategory.CONFIG,
+        registry=parameter_map["REG_FREE_COOLING_MIN_SPEED_LEVEL_SAF"],
+        options_map={
+            3: "normal",
+            4: "high",
+            5: "maximum",
+        },
+    ),
+    SystemairSelectEntityDescription(
+        key="free_cooling_extract_fan_level",
+        translation_key="free_cooling_extract_fan_level",
+        icon="mdi:fan",
+        entity_category=EntityCategory.CONFIG,
+        registry=parameter_map["REG_FREE_COOLING_MIN_SPEED_LEVEL_EAF"],
+        options_map={
+            3: "normal",
+            4: "high",
+            5: "maximum",
+        },
+    ),
 )
 
 
@@ -90,7 +114,6 @@ async def async_setup_entry(
 class SystemairSelect(SystemairEntity, SelectEntity):
     """Systemair select class."""
 
-    _attr_has_entity_name = True
     entity_description: SystemairSelectEntityDescription
 
     def __init__(

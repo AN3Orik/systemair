@@ -109,6 +109,27 @@
             },
             "eco_mode_temperature_offset": {
                 "name": "Eco Mode Temperature Offset"
+            },
+            "free_cooling_outdoor_low_limit": {
+                "name": "Free Cooling: Outdoor Low Limit"
+            },
+            "free_cooling_outdoor_high_limit": {
+                "name": "Free Cooling: Outdoor High Limit"
+            },
+            "free_cooling_room_cancel_temp": {
+                "name": "Free Cooling: Room Cancel Temperature"
+            },
+            "free_cooling_start_time_hours": {
+                "name": "Free Cooling: Start Time Hours"
+            },
+            "free_cooling_start_time_minutes": {
+                "name": "Free Cooling: Start Time Minutes"
+            },
+            "free_cooling_end_time_hours": {
+                "name": "Free Cooling: End Time Hours"
+            },
+            "free_cooling_end_time_minutes": {
+                "name": "Free Cooling: End Time Minutes"
             }
         },
         "sensor": {
@@ -260,6 +281,22 @@
                     "soft": "Soft",
                     "normal": "Normal",
                     "hard": "Hard"
+                }
+            },
+            "free_cooling_supply_fan_level": {
+                "name": "Free Cooling: Supply Fan Level",
+                "state": {
+                    "normal": "Normal",
+                    "high": "High",
+                    "maximum": "Maximum"
+                }
+            },
+            "free_cooling_extract_fan_level": {
+                "name": "Free Cooling: Extract Fan Level",
+                "state": {
+                    "normal": "Normal",
+                    "high": "High",
+                    "maximum": "Maximum"
                 }
             }
         },

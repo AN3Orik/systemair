@@ -53,8 +53,6 @@ async def async_setup_entry(
 class SystemairButton(SystemairEntity, ButtonEntity):
     """Systemair button class."""
 
-    _attr_has_entity_name = True
-
     def __init__(
         self,
         coordinator: SystemairDataUpdateCoordinator,

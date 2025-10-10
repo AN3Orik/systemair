@@ -109,6 +109,27 @@
             },
             "eco_mode_temperature_offset": {
                 "name": "Смещение температуры в Эко-режиме"
+            },
+            "free_cooling_outdoor_low_limit": {
+                "name": "Свободное охлаждение: Нижний предел наружной температуры"
+            },
+            "free_cooling_outdoor_high_limit": {
+                "name": "Свободное охлаждение: Верхний предел наружной температуры"
+            },
+            "free_cooling_room_cancel_temp": {
+                "name": "Свободное охлаждение: Температура отмены"
+            },
+            "free_cooling_start_time_hours": {
+                "name": "Свободное охлаждение: Час начала"
+            },
+            "free_cooling_start_time_minutes": {
+                "name": "Свободное охлаждение: Минуты начала"
+            },
+            "free_cooling_end_time_hours": {
+                "name": "Свободное охлаждение: Час окончания"
+            },
+            "free_cooling_end_time_minutes": {
+                "name": "Свободное охлаждение: Минуты окончания"
             }
         },
         "sensor": {
@@ -260,6 +281,22 @@
                     "soft": "Мягкий",
                     "normal": "Обычный",
                     "hard": "Интенсивный"
+                }
+            },
+            "free_cooling_supply_fan_level": {
+                "name": "Свободное охлаждение: Уровень приточного вентилятора",
+                "state": {
+                    "normal": "Обычный",
+                    "high": "Высокий",
+                    "maximum": "Максимальный"
+                }
+            },
+            "free_cooling_extract_fan_level": {
+                "name": "Свободное охлаждение: Уровень вытяжного вентилятора",
+                "state": {
+                    "normal": "Обычный",
+                    "high": "Высокий",
+                    "maximum": "Максимальный"
                 }
             }
         },

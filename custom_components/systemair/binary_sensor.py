@@ -75,8 +75,6 @@ async def async_setup_entry(
 class SystemairBinarySensor(SystemairEntity, BinarySensorEntity):
     """Systemair binary_sensor class."""
 
-    _attr_has_entity_name = True
-
     entity_description: SystemairBinarySensorEntityDescription
 
     def __init__(
