@@ -69,6 +69,24 @@
             },
             "cool_recovery_active": {
                 "name": "Cool Recovery Active"
+            },
+            "free_cooling_active": {
+                "name": "Free Cooling Active"
+            },
+            "defrosting_active": {
+                "name": "Defrosting Active"
+            },
+            "moisture_transfer_active": {
+                "name": "Moisture Transfer Active"
+            },
+            "secondary_air_active": {
+                "name": "Secondary Air Active"
+            },
+            "vacuum_cleaner_active": {
+                "name": "Vacuum Cleaner Active"
+            },
+            "cooker_hood_active": {
+                "name": "Cooker Hood Active"
             }
         },
         "climate": {

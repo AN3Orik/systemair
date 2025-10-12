@@ -69,6 +69,24 @@
             },
             "cool_recovery_active": {
                 "name": "Рекуперация холода активна"
+            },
+            "free_cooling_active": {
+                "name": "Фрикулинг активен"
+            },
+            "defrosting_active": {
+                "name": "Разморозка активна"
+            },
+            "moisture_transfer_active": {
+                "name": "Перенос влаги активен"
+            },
+            "secondary_air_active": {
+                "name": "Вторичный воздух активен"
+            },
+            "vacuum_cleaner_active": {
+                "name": "Пылесос активен"
+            },
+            "cooker_hood_active": {
+                "name": "Вытяжка активна"
             }
         },
         "climate": {

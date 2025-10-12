@@ -54,6 +54,42 @@ ENTITY_DESCRIPTIONS = (
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_FUNCTION_ACTIVE_COOLING_RECOVERY"],
     ),
+    SystemairBinarySensorEntityDescription(
+        key="free_cooling_active",
+        translation_key="free_cooling_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_FREE_COOLING"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="defrosting_active",
+        translation_key="defrosting_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_DEFROSTING"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="moisture_transfer_active",
+        translation_key="moisture_transfer_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_MOISTURE_TRANSFER"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="secondary_air_active",
+        translation_key="secondary_air_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_SECONDARY_AIR"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="vacuum_cleaner_active",
+        translation_key="vacuum_cleaner_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_VACUUM_CLEANER"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="cooker_hood_active",
+        translation_key="cooker_hood_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_COOKER_HOOD"],
+    ),
 )
 
 

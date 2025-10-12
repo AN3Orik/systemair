@@ -2419,53 +2419,6 @@ parameters_list = [
 
 parameter_map = {param.short: param for param in parameters_list}
 
-operation_parameters = {
-    short: parameter_map[short]
-    for short in [
-        "REG_TC_SP",
-        "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_MODE",
-        "REG_ECO_MODE_ON_OFF",
-        "REG_SENSOR_RPM_SAF",
-        "REG_SENSOR_RPM_EAF",
-        "REG_OUTPUT_SAF",
-        "REG_OUTPUT_EAF",
-        "REG_SPEED_FANS_RUNNING",
-    ]
-}
-
-sensor_parameters = {
-    short: parameter_map[short]
-    for short in [
-        "REG_SENSOR_RHS_PDM",
-        "REG_SENSOR_OAT",
-        "REG_SENSOR_SAT",
-        "REG_SENSOR_PDM_EAT_VALUE",
-        "REG_SENSOR_OHT",
-        "REG_DEMC_RH_HIGHEST",
-        "REG_DEMC_CO2_HIGHEST",
-        "REG_IAQ_LEVEL",
-    ]
-}
-
-config_parameters = {
-    short: parameter_map[short]
-    for short in [
-        "REG_FILTER_REMAINING_TIME_L",
-        "REG_FILTER_REMAINING_TIME_H",
-        "REG_FREE_COOLING_ON_OFF",
-        "REG_USERMODE_CROWDED_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_REFRESH_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_FIREPLACE_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_AWAY_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_HOLIDAY_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_COOKERHOOD_AIRFLOW_LEVEL_SAF",
-        "REG_USERMODE_VACUUMCLEANER_AIRFLOW_LEVEL_SAF",
-        "REG_PRESSURE_GUARD_AIRFLOW_LEVEL_SAF",
-        "REG_FAN_MANUAL_STOP_ALLOWED",
-    ]
-}
-
 alarm_parameters = {
     short: parameter_map[short]
     for short in [
@@ -2485,25 +2438,6 @@ alarm_parameters = {
         "REG_ALARM_TYPE_A",
         "REG_ALARM_TYPE_B",
         "REG_ALARM_TYPE_C",
-    ]
-}
-
-function_parameters = {
-    short: parameter_map[short]
-    for short in [
-        "REG_FUNCTION_ACTIVE_PRESSURE_GUARD",
-        "REG_SENSOR_DI_COOKERHOOD",
-        "REG_SENSOR_DI_VACUUMCLEANER",
-        "REG_FUNCTION_ACTIVE_HEATER_COOL_DOWN",
-        "REG_FUNCTION_ACTIVE_CDI_1",
-        "REG_FUNCTION_ACTIVE_CDI_2",
-        "REG_FUNCTION_ACTIVE_CDI_3",
-        "REG_ECO_FUNCTION_ACTIVE",
-        "REG_FUNCTION_ACTIVE_FREE_COOLING",
-        "REG_FUNCTION_ACTIVE_COOLING_RECOVERY",
-        "REG_FUNCTION_ACTIVE_HEAT_RECOVERY",
-        "REG_FUNCTION_ACTIVE_HEATING",
-        "REG_FUNCTION_ACTIVE_COOLING",
     ]
 }
 
