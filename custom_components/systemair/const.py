@@ -27,10 +27,27 @@ CONF_PARITY = "parity"
 CONF_STOPBITS = "stopbits"
 
 DEFAULT_SERIAL_PORT = "/dev/ttyUSB0"
-DEFAULT_BAUDRATE = 19200
-DEFAULT_BYTESIZE = 8
-DEFAULT_STOPBITS = 1
-DEFAULT_PARITY = "N"
+DEFAULT_BAUDRATE = 115200
+DEFAULT_BYTESIZE = "8 bits"
+DEFAULT_STOPBITS = "1"
+DEFAULT_PARITY = "None"
+
+# Serial port options
+SERIAL_BAUDRATES = [9600, 19200, 38400, 57600, 115200]
+SERIAL_BYTESIZES = {
+    "7 bits": 7,
+    "8 bits": 8,
+}
+SERIAL_PARITIES = {
+    "None": "N",
+    "Even": "E",
+    "Odd": "O",
+}
+SERIAL_STOPBITS = {
+    "1": 1,
+    "1.5": 1.5,
+    "2": 2,
+}
 
 # --- Power Specs for different models ---
 MODEL_SPECS = {

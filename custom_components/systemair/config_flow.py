@@ -39,6 +39,10 @@ from .const import (
     DOMAIN,
     LOGGER,
     MODEL_SPECS,
+    SERIAL_BAUDRATES,
+    SERIAL_BYTESIZES,
+    SERIAL_PARITIES,
+    SERIAL_STOPBITS,
 )
 
 
@@ -72,12 +76,26 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_serial_connection(self, user_input: dict) -> None:
         """Validate the connection to the unit via Modbus Serial."""
+        baudrate = int(user_input[CONF_BAUDRATE])
+
+        bytesize = user_input[CONF_BYTESIZE]
+        if bytesize in SERIAL_BYTESIZES:
+            bytesize = SERIAL_BYTESIZES[bytesize]
+
+        parity = user_input[CONF_PARITY]
+        if parity in SERIAL_PARITIES:
+            parity = SERIAL_PARITIES[parity]
+
+        stopbits = user_input[CONF_STOPBITS]
+        if stopbits in SERIAL_STOPBITS:
+            stopbits = SERIAL_STOPBITS[stopbits]
+
         client = SystemairSerialClient(
             port=user_input[CONF_SERIAL_PORT],
-            baudrate=user_input[CONF_BAUDRATE],
-            bytesize=user_input[CONF_BYTESIZE],
-            parity=user_input[CONF_PARITY],
-            stopbits=user_input[CONF_STOPBITS],
+            baudrate=baudrate,
+            bytesize=bytesize,
+            parity=parity,
+            stopbits=stopbits,
             slave_id=user_input[CONF_SLAVE_ID],
         )
         try:
@@ -191,9 +209,17 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_SERIAL
 
-                # Convert string values to integers for bytesize and stopbits
-                user_input[CONF_BYTESIZE] = int(user_input[CONF_BYTESIZE])
-                user_input[CONF_STOPBITS] = int(user_input[CONF_STOPBITS])
+                # Convert display values to serial library constants
+                user_input[CONF_BAUDRATE] = int(user_input[CONF_BAUDRATE])
+
+                if user_input[CONF_BYTESIZE] in SERIAL_BYTESIZES:
+                    user_input[CONF_BYTESIZE] = SERIAL_BYTESIZES[user_input[CONF_BYTESIZE]]
+
+                if user_input[CONF_PARITY] in SERIAL_PARITIES:
+                    user_input[CONF_PARITY] = SERIAL_PARITIES[user_input[CONF_PARITY]]
+
+                if user_input[CONF_STOPBITS] in SERIAL_STOPBITS:
+                    user_input[CONF_STOPBITS] = SERIAL_STOPBITS[user_input[CONF_STOPBITS]]
 
                 return self.async_create_entry(
                     title=user_input.get(CONF_MODEL, f"Serial {user_input[CONF_SERIAL_PORT]}"),
@@ -205,26 +231,27 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_SERIAL_PORT, default=DEFAULT_SERIAL_PORT): selector.TextSelector(),
-                    vol.Required(CONF_BAUDRATE, default=DEFAULT_BAUDRATE): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            mode=selector.NumberSelectorMode.BOX,
+                    vol.Required(CONF_BAUDRATE, default=str(DEFAULT_BAUDRATE)): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[str(b) for b in SERIAL_BAUDRATES],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
                     vol.Required(CONF_BYTESIZE, default=DEFAULT_BYTESIZE): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=["7", "8"],
+                            options=list(SERIAL_BYTESIZES.keys()),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
                     vol.Required(CONF_PARITY, default=DEFAULT_PARITY): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=["N", "E", "O"],
+                            options=list(SERIAL_PARITIES.keys()),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
                     vol.Required(CONF_STOPBITS, default=DEFAULT_STOPBITS): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=["1", "2"],
+                            options=list(SERIAL_STOPBITS.keys()),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
