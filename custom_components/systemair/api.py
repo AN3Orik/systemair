@@ -182,11 +182,14 @@ class SystemairModbusClient(SystemairClientBase):
                 await self._ensure_connected()
 
                 if request_type == "read":
-                    result = await self._client.read_holding_registers(address=address, count=kwargs["count"], device_id=self.slave_id)
+                    count = kwargs.get("count", 1)
+                    result = await self._client.read_holding_registers(address=address, count=count, device_id=self.slave_id)
                 elif request_type == "write":
-                    result = await self._client.write_register(address=address, value=kwargs["value"], device_id=self.slave_id)
+                    value = kwargs["value"]
+                    result = await self._client.write_register(address=address, value=value, device_id=self.slave_id)
                 elif request_type == "write_multiple":
-                    result = await self._client.write_registers(address=address, values=kwargs["values"], device_id=self.slave_id)
+                    values = kwargs["values"]
+                    result = await self._client.write_registers(address=address, values=values, device_id=self.slave_id)
                 else:
                     self._raise_unknown_request_type(request_type)
 
@@ -400,30 +403,30 @@ class SystemairSerialClient(SystemairClientBase):
 
                 if request_type == "read":
                     count = kwargs.get("count", 1)
-                    result = await self._client.read_holding_registers(address, count, slave=self._slave_id)
+                    result = await self._client.read_holding_registers(address=address, count=count, device_id=self._slave_id)
                 elif request_type == "write":
                     value = kwargs["value"]
-                    result = await self._client.write_register(address, value, slave=self._slave_id)
+                    result = await self._client.write_register(address=address, value=value, device_id=self._slave_id)
                 elif request_type == "write_multiple":
                     values = kwargs["values"]
-                    result = await self._client.write_registers(address, values, slave=self._slave_id)
+                    result = await self._client.write_registers(address=address, values=values, device_id=self._slave_id)
                 else:
                     self._raise_unknown_request_type(request_type)
 
-                if result.isError():
-                    exception_code = getattr(result, "exception_code", None)
-                    if exception_code in {MODBUS_DEVICE_BUSY_EXCEPTION, MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND}:
-                        LOGGER.debug(
-                            "Device busy/unresponsive (code %s) on %s. Retrying in %.2fs...",
-                            result.exception_code,
-                            request_type,
-                            delay,
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        self._raise_unrecoverable_modbus_error(result)
+                if not result.isError():
+                    return result.registers if request_type == "read" else True
+
+                if result.exception_code in {MODBUS_DEVICE_BUSY_EXCEPTION, MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND}:
+                    delay = base_delay * (2**attempt)
+                    LOGGER.debug(
+                        "Device busy/unresponsive (code %s) on %s. Retrying in %.2fs...",
+                        result.exception_code,
+                        request_type,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
                 else:
-                    return result
+                    self._raise_unrecoverable_modbus_error(result)
 
             except (TimeoutError, ConnectionException, ModbusConnectionError) as e:
                 LOGGER.warning("Connection error during %s: %s. Attempting to reconnect...", request_type, e)
@@ -466,26 +469,21 @@ class SystemairSerialClient(SystemairClientBase):
 
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""
-        result = await self._queue_request("write", address_1based - 1, value=value)
-        if result.isError():
-            msg = f"Failed to write register {address_1based}"
-            raise ModbusConnectionError(msg)
+        await self._queue_request("write", address_1based - 1, value=value)
 
     async def write_registers_32bit(self, address_1based: int, value: int) -> None:
         """Queue a write request for a 32-bit value across two registers."""
         low_word = value & 0xFFFF
         high_word = (value >> 16) & 0xFFFF
-        result = await self._queue_request("write_multiple", address_1based - 1, values=[low_word, high_word])
-        if result.isError():
-            msg = f"Failed to write 32-bit value to registers {address_1based}-{address_1based + 1}"
-            raise ModbusConnectionError(msg)
+        values = [low_word, high_word]
+        await self._queue_request("write_multiple", address_1based - 1, values=values)
 
     async def test_connection(self) -> bool:
         """Test connection to the Modbus Serial device."""
         try:
             await self._ensure_connection()
             # Try to read a single register to verify communication
-            result = await self._client.read_holding_registers(0, 1, slave=self._slave_id)
+            result = await self._client.read_holding_registers(address=0, count=1, device_id=self._slave_id)
             return not result.isError()
         except (ModbusConnectionError, ConnectionException) as e:
             LOGGER.error("Serial connection test failed: %s", e)
@@ -495,33 +493,23 @@ class SystemairSerialClient(SystemairClientBase):
             return False
 
     async def get_all_data(self) -> dict[str, Any]:
-        """Get all data from device by reading all defined register blocks."""
-        all_registers: dict[str, Any] = {}
+        """Queue read requests for all required data blocks and assemble the result."""
+        tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in READ_BLOCKS]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_registers = {}
         has_successful_read = False
-
-        for start_address_1based, count in READ_BLOCKS:
-            try:
-                result = await self._queue_request("read", start_address_1based - 1, count=count)
-
-                if result.isError():
-                    LOGGER.debug("Failed to read block at %d: error", start_address_1based)
-                    continue
-
-                has_successful_read = True
-                registers = result.registers
-
-                # Map register values to parameter names
-                for reg_addr in range(start_address_1based, start_address_1based + count):
-                    key = str(reg_addr)
-                    reg_val = registers[reg_addr - start_address_1based]
-                    all_registers[key] = reg_val
-
-            except ModbusConnectionError as e:
-                LOGGER.debug("Error reading block at %d: %s", start_address_1based, e)
+        for i, result in enumerate(results):
+            start_addr_1based, _ = READ_BLOCKS[i]
+            if isinstance(result, Exception):
+                LOGGER.error(f"Failed to read block {start_addr_1based}: {result}")
                 continue
-            except (TimeoutError, ConnectionException) as e:
-                LOGGER.debug("Connection error reading block at %d: %s", start_address_1based, e)
-                continue
+
+            has_successful_read = True
+            for offset, reg_val in enumerate(result):
+                key = str(start_addr_1based - 1 + offset)
+                all_registers[key] = reg_val
 
         if not has_successful_read:
             msg = "Failed to read any data blocks from the device."
