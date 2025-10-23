@@ -87,6 +87,33 @@
             },
             "cooker_hood_active": {
                 "name": "Cooker Hood Active"
+            },
+            "heating_active": {
+                "name": "Heating Active"
+            },
+            "heater_cool_down_active": {
+                "name": "Heater Cool Down Active"
+            },
+            "heater_digital_output": {
+                "name": "Heater Digital Output"
+            },
+            "emergency_thermostat": {
+                "name": "Emergency Thermostat"
+            },
+            "heating_circ_pump": {
+                "name": "Heating Circulation Pump"
+            },
+            "cooling_circ_pump": {
+                "name": "Cooling Circulation Pump"
+            },
+            "changeover_circ_pump": {
+                "name": "Changeover Circulation Pump"
+            },
+            "extra_controller_circ_pump": {
+                "name": "Extra Controller Circulation Pump"
+            },
+            "changeover_feedback": {
+                "name": "Changeover Feedback"
             }
         },
         "climate": {
@@ -100,7 +127,13 @@
                             "refresh": "Refresh",
                             "fireplace": "Fireplace",
                             "away": "Away",
-                            "holiday": "Holiday"
+                            "holiday": "Holiday",
+                            "cooker_hood": "Cooker Hood",
+                            "vacuum_cleaner": "Vacuum Cleaner",
+                            "cdi1": "CDI1",
+                            "cdi2": "CDI2",
+                            "cdi3": "CDI3",
+                            "pressure_guard": "Pressure Guard"
                         }
                     }
                 }
@@ -148,6 +181,27 @@
             },
             "free_cooling_end_time_minutes": {
                 "name": "Free Cooling: End Time Minutes"
+            },
+            "heating_circ_pump_start_temp": {
+                "name": "Heating Circulation Pump: Start Temperature"
+            },
+            "heating_circ_pump_stop_delay": {
+                "name": "Heating Circulation Pump: Stop Delay"
+            },
+            "cooling_circ_pump_stop_delay": {
+                "name": "Cooling Circulation Pump: Stop Delay"
+            },
+            "changeover_circ_pump_start_temp": {
+                "name": "Changeover Circulation Pump: Start Temperature"
+            },
+            "changeover_circ_pump_stop_delay": {
+                "name": "Changeover Circulation Pump: Stop Delay"
+            },
+            "extra_controller_circ_pump_start_temp": {
+                "name": "Extra Controller Circulation Pump: Start Temperature"
+            },
+            "extra_controller_circ_pump_stop_delay": {
+                "name": "Extra Controller Circulation Pump: Stop Delay"
             }
         },
         "sensor": {
@@ -181,6 +235,27 @@
             "heater_output_value": {
                 "name": "Heater output value"
             },
+            "heating_demand": {
+                "name": "Heating Demand"
+            },
+            "heater_analog_output": {
+                "name": "Heater Analog Output"
+            },
+            "changeover_analog_output": {
+                "name": "Changeover Analog Output"
+            },
+            "heating_circ_pump_counter": {
+                "name": "Heating Circulation Pump Counter"
+            },
+            "cooling_circ_pump_counter": {
+                "name": "Cooling Circulation Pump Counter"
+            },
+            "changeover_circ_pump_counter": {
+                "name": "Changeover Circulation Pump Counter"
+            },
+            "extra_controller_circ_pump_counter": {
+                "name": "Extra Controller Circulation Pump Counter"
+            },
             "filter_remaining_time": {
                 "name": "Filter remaining time"
             },
@@ -189,6 +264,15 @@
             },
             "demand_active_controller": {
                 "name": "Demand Active Controller"
+            },
+            "auto_mode_source": {
+                "name": "Auto Mode Source",
+                "state": {
+                    "external_control": "External control",
+                    "demand_control": "Demand control",
+                    "week_schedule": "Week schedule",
+                    "configuration_fault": "Configuration fault"
+                }
             },
             "defrosting_state": {
                 "name": "Defrosting State"

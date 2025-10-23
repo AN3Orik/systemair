@@ -87,6 +87,33 @@
             },
             "cooker_hood_active": {
                 "name": "Вытяжка активна"
+            },
+            "heating_active": {
+                "name": "Нагрев активен"
+            },
+            "heater_cool_down_active": {
+                "name": "Задержка нагревателя"
+            },
+            "heater_digital_output": {
+                "name": "Цифровой выход нагревателя"
+            },
+            "emergency_thermostat": {
+                "name": "Аварийный термостат"
+            },
+            "heating_circ_pump": {
+                "name": "Циркуляционный насос отопления"
+            },
+            "cooling_circ_pump": {
+                "name": "Циркуляционный насос охлаждения"
+            },
+            "changeover_circ_pump": {
+                "name": "Переключаемый циркуляционный насос"
+            },
+            "extra_controller_circ_pump": {
+                "name": "Циркуляционный насос доп. контроллера"
+            },
+            "changeover_feedback": {
+                "name": "Обратная связь переключения"
             }
         },
         "climate": {
@@ -100,7 +127,13 @@
                             "refresh": "Проветривание",
                             "fireplace": "Камин",
                             "away": "Отсутствие",
-                            "holiday": "Отпуск"
+                            "holiday": "Отпуск",
+                            "cooker_hood": "Вытяжка",
+                            "vacuum_cleaner": "Пылесос",
+                            "cdi1": "CDI1",
+                            "cdi2": "CDI2",
+                            "cdi3": "CDI3",
+                            "pressure_guard": "Защита давления"
                         }
                     }
                 }
@@ -148,6 +181,27 @@
             },
             "free_cooling_end_time_minutes": {
                 "name": "Свободное охлаждение: Минуты окончания"
+            },
+            "heating_circ_pump_start_temp": {
+                "name": "Циркуляционный насос отопления: Температура включения"
+            },
+            "heating_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос отопления: Задержка выключения"
+            },
+            "cooling_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос охлаждения: Задержка выключения"
+            },
+            "changeover_circ_pump_start_temp": {
+                "name": "Переключаемый циркуляционный насос: Температура включения"
+            },
+            "changeover_circ_pump_stop_delay": {
+                "name": "Переключаемый циркуляционный насос: Задержка выключения"
+            },
+            "extra_controller_circ_pump_start_temp": {
+                "name": "Циркуляционный насос доп. контроллера: Температура включения"
+            },
+            "extra_controller_circ_pump_stop_delay": {
+                "name": "Циркуляционный насос доп. контроллера: Задержка выключения"
             }
         },
         "sensor": {
@@ -181,6 +235,27 @@
             "heater_output_value": {
                 "name": "Мощность нагревателя"
             },
+            "heating_demand": {
+                "name": "Требуемая мощность нагрева"
+            },
+            "heater_analog_output": {
+                "name": "Аналоговый выход нагревателя"
+            },
+            "changeover_analog_output": {
+                "name": "Аналоговый выход переключаемого насоса"
+            },
+            "heating_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса отопления"
+            },
+            "cooling_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса охлаждения"
+            },
+            "changeover_circ_pump_counter": {
+                "name": "Таймер переключаемого циркуляционного насоса"
+            },
+            "extra_controller_circ_pump_counter": {
+                "name": "Таймер циркуляционного насоса доп. контроллера"
+            },
             "filter_remaining_time": {
                 "name": "Оставшееся время работы фильтра"
             },
@@ -189,6 +264,15 @@
             },
             "demand_active_controller": {
                 "name": "Активный контроллер"
+            },
+            "auto_mode_source": {
+                "name": "Источник автоматического режима",
+                "state": {
+                    "external_control": "Внешнее управление",
+                    "demand_control": "Управление по потребности",
+                    "week_schedule": "Недельное расписание",
+                    "configuration_fault": "Ошибка конфигурации"
+                }
             },
             "defrosting_state": {
                 "name": "Состояние разморозки"

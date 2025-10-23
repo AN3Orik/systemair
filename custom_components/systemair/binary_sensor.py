@@ -90,6 +90,60 @@ ENTITY_DESCRIPTIONS = (
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_FUNCTION_ACTIVE_COOKER_HOOD"],
     ),
+    SystemairBinarySensorEntityDescription(
+        key="heating_active",
+        translation_key="heating_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_HEATING"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="heater_cool_down_active",
+        translation_key="heater_cool_down_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_FUNCTION_ACTIVE_HEATER_COOL_DOWN"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="heater_digital_output",
+        translation_key="heater_digital_output",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_Y1_DIGITAL"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="emergency_thermostat",
+        translation_key="emergency_thermostat",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        registry=parameter_map["REG_SENSOR_EMT"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="heating_circ_pump",
+        translation_key="heating_circ_pump",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_Y1_CIRC_PUMP"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="cooling_circ_pump",
+        translation_key="cooling_circ_pump",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_Y3_CIRC_PUMP"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="changeover_circ_pump",
+        translation_key="changeover_circ_pump",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_Y1_Y3_CIRC_PUMP"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="extra_controller_circ_pump",
+        translation_key="extra_controller_circ_pump",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_Y4_CIRC_PUMP"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="changeover_feedback",
+        translation_key="changeover_feedback",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_SENSOR_DI_CHANGE_OVER_FEEDBACK"],
+    ),
 )
 
 
