@@ -275,7 +275,14 @@
                 }
             },
             "defrosting_state": {
-                "name": "Defrosting State"
+                "name": "Defrosting State",
+                "state": {
+                    "normal": "Normal",
+                    "bypass": "Bypass",
+                    "stop": "Stop",
+                    "secondary_air": "Secondary air",
+                    "error": "Error"
+                }
             },
             "supply_fan_power": {
                 "name": "Supply Fan Power"

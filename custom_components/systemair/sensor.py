@@ -95,6 +95,12 @@ ALARM_STATE_TO_VALUE_MAP = {
 VALUE_MAP_TO_ALARM_STATE = {value: key for key, value in ALARM_STATE_TO_VALUE_MAP.items()}
 IAQ_LEVEL_MAP = {0: "Perfect", 1: "Good", 2: "Improving"}
 DEMAND_CONTROLLER_MAP = {0: "CO2", 1: "RH"}
+AUTO_MODE_SOURCE_MAP = {
+    0: "External control",
+    1: "Demand control",
+    2: "Week schedule",
+    3: "Configuration fault",
+}
 DEFROSTING_STATE_MAP = {
     0: "Normal",
     1: "Bypass",
@@ -402,6 +408,7 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     _KEY_TO_MAP: ClassVar[dict[str, dict[int, str]]] = {
         "iaq_level": IAQ_LEVEL_MAP,
         "demand_active_controller": DEMAND_CONTROLLER_MAP,
+        "auto_mode_source": AUTO_MODE_SOURCE_MAP,
         "defrosting_state": DEFROSTING_STATE_MAP,
     }
 
