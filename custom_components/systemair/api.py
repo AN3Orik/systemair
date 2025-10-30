@@ -26,7 +26,7 @@ __all__ = [
 
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
-WEB_API_MAX_REGISTERS_PER_REQUEST = 30
+WEB_API_MAX_REGISTERS_PER_REQUEST = 70
 
 READ_BLOCKS = [
     (1001, 62),
@@ -537,7 +537,7 @@ class SystemairWebApiClient(SystemairClientBase):
         self._address = address
         self._session = session
         self._lock = asyncio.Lock()
-        self._max_registers_per_request = max_registers_per_request
+        self._max_registers_per_request = int(max_registers_per_request)
 
     @property
     def address(self) -> str:
@@ -569,7 +569,7 @@ class SystemairWebApiClient(SystemairClientBase):
 
             # Split large blocks into smaller chunks to avoid 414 URI Too Long error
             total_regs = len(reg)
-            chunks_needed = (total_regs + self._max_registers_per_request - 1) // self._max_registers_per_request
+            chunks_needed = int((total_regs + self._max_registers_per_request - 1) // self._max_registers_per_request)
 
             for chunk_idx in range(chunks_needed):
                 start_idx = chunk_idx * self._max_registers_per_request
@@ -640,7 +640,7 @@ class SystemairWebApiClient(SystemairClientBase):
         all_data = {}
 
         # Split large blocks into smaller chunks to avoid 414 URI Too Long error
-        chunks_needed = (count + self._max_registers_per_request - 1) // self._max_registers_per_request
+        chunks_needed = int((count + self._max_registers_per_request - 1) // self._max_registers_per_request)
 
         for chunk_idx in range(chunks_needed):
             chunk_start = start + (chunk_idx * self._max_registers_per_request)
