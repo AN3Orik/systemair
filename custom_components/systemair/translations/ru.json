@@ -51,7 +51,11 @@
             "init": {
                 "title": "Настройки Systemair",
                 "data": {
-                    "model": "Модель устройства"
+                    "model": "Модель устройства",
+                    "web_api_max_registers": "Макс. регистров на запрос Web API"
+                },
+                "data_description": {
+                    "web_api_max_registers": "Максимальное количество регистров, читаемых за один запрос Web API. Диапазон: 30-125."
                 }
             }
         }

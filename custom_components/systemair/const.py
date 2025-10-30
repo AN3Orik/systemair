@@ -11,8 +11,10 @@ ATTRIBUTION = "Data provided by Systemair SAVE Connect."
 CONF_MODEL = "model"
 CONF_SLAVE_ID = "slave_id"
 CONF_API_TYPE = "api_type"
+CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
+DEFAULT_WEB_API_MAX_REGISTERS = 30
 
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"

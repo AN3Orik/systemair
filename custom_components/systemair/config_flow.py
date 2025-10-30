@@ -29,6 +29,7 @@ from .const import (
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
+    CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
     DEFAULT_PARITY,
@@ -36,6 +37,7 @@ from .const import (
     DEFAULT_SERIAL_PORT,
     DEFAULT_SLAVE_ID,
     DEFAULT_STOPBITS,
+    DEFAULT_WEB_API_MAX_REGISTERS,
     DOMAIN,
     LOGGER,
     MODEL_SPECS,
@@ -337,17 +339,30 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
+        api_type = self.config_entry.data.get(CONF_API_TYPE)
+
+        # Base schema with model selection
+        schema_dict = {
+            vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=list(MODEL_SPECS.keys()),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+
+        # Web API specific options
+        if api_type == API_TYPE_MODBUS_WEBAPI:
+            default_max_registers = self.config_entry.options.get(CONF_WEB_API_MAX_REGISTERS, DEFAULT_WEB_API_MAX_REGISTERS)
+            schema_dict[vol.Optional(CONF_WEB_API_MAX_REGISTERS, default=default_max_registers)] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=30,
+                    max=125,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=list(MODEL_SPECS.keys()),
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
         )

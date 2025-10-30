@@ -26,6 +26,7 @@ __all__ = [
 
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
+WEB_API_MAX_REGISTERS_PER_REQUEST = 30
 
 READ_BLOCKS = [
     (1001, 62),
@@ -530,11 +531,13 @@ class SystemairWebApiClient(SystemairClientBase):
         self,
         address: str,
         session: aiohttp.ClientSession,
+        max_registers_per_request: int = WEB_API_MAX_REGISTERS_PER_REQUEST,
     ) -> None:
         """Systemair API Client."""
         self._address = address
         self._session = session
         self._lock = asyncio.Lock()
+        self._max_registers_per_request = max_registers_per_request
 
     @property
     def address(self) -> str:
@@ -620,21 +623,32 @@ class SystemairWebApiClient(SystemairClientBase):
             return all_registers
 
     async def _read_block(self, start: int, count: int) -> dict[str, Any]:
-        """Read a single block of registers."""
-        # Build list of registers for this block
-        regs = [start - 1 + offset for offset in range(count)]
+        """Read a single block of registers, splitting into smaller chunks if needed to avoid URL length limit."""
+        all_data = {}
 
-        # Build query params
-        query_params = ",".join(f"%22{reg}%22:1" for reg in regs)
-        url = f"http://{self._address}/mread?{{{query_params}}}"
+        # Split large blocks into smaller chunks to avoid 414 URI Too Long error
+        chunks_needed = (count + self._max_registers_per_request - 1) // self._max_registers_per_request
 
-        try:
-            result = await self._api_wrapper(method="get", url=url)
-            # Convert result to match Modbus TCP format (string keys)
-            return {str(k): v for k, v in result.items()}
-        except SystemairApiClientError as e:
-            msg = f"Failed to read block starting at {start}: {e}"
-            raise ModbusConnectionError(msg) from e
+        for chunk_idx in range(chunks_needed):
+            chunk_start = start + (chunk_idx * self._max_registers_per_request)
+            chunk_count = min(self._max_registers_per_request, count - (chunk_idx * self._max_registers_per_request))
+
+            # Build list of registers for this chunk
+            regs = [chunk_start - 1 + offset for offset in range(chunk_count)]
+
+            # Build query params
+            query_params = ",".join(f"%22{reg}%22:1" for reg in regs)
+            url = f"http://{self._address}/mread?{{{query_params}}}"
+
+            try:
+                result = await self._api_wrapper(method="get", url=url)
+                # Convert result to match Modbus TCP format (string keys)
+                all_data.update({str(k): v for k, v in result.items()})
+            except SystemairApiClientError as e:
+                msg = f"Failed to read block chunk starting at {chunk_start}: {e}"
+                raise ModbusConnectionError(msg) from e
+
+        return all_data
 
     async def _parse_response(self, response: aiohttp.ClientResponse, *, retry: bool) -> Any:
         """Parse the response."""

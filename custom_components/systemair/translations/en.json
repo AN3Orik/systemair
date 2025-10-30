@@ -51,7 +51,11 @@
             "init": {
                 "title": "Systemair Settings",
                 "data": {
-                    "model": "Ventilation Unit Model"
+                    "model": "Ventilation Unit Model",
+                    "web_api_max_registers": "Max registers per Web API request"
+                },
+                "data_description": {
+                    "web_api_max_registers": "Maximum number of registers to read in a single Web API request. Range: 30-125."
                 }
             }
         }
