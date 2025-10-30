@@ -565,9 +565,23 @@ class SystemairWebApiClient(SystemairClientBase):
     async def async_get_data(self, reg: list[ModbusParameter]) -> Any:
         """Read modbus registers."""
         async with self._lock:
-            query_params = ",".join(f"%22{item.register - 1}%22:1" for item in reg)
-            url = f"http://{self._address}/mread?{{{query_params}}}"
-            return await self._api_wrapper(method="get", url=url)
+            all_data = {}
+
+            # Split large blocks into smaller chunks to avoid 414 URI Too Long error
+            total_regs = len(reg)
+            chunks_needed = (total_regs + self._max_registers_per_request - 1) // self._max_registers_per_request
+
+            for chunk_idx in range(chunks_needed):
+                start_idx = chunk_idx * self._max_registers_per_request
+                end_idx = min(start_idx + self._max_registers_per_request, total_regs)
+                chunk_regs = reg[start_idx:end_idx]
+
+                query_params = ",".join(f"%22{item.register - 1}%22:1" for item in chunk_regs)
+                url = f"http://{self._address}/mread?{{{query_params}}}"
+                result = await self._api_wrapper(method="get", url=url)
+                all_data.update(result)
+
+            return all_data
 
     async def async_set_data(self, registry: ModbusParameter, value: int) -> Any:
         """Write data to the API."""
@@ -597,7 +611,6 @@ class SystemairWebApiClient(SystemairClientBase):
     async def get_all_data(self) -> dict[str, Any]:
         """Get all data from device (compatibility with Modbus TCP client)."""
         async with self._lock:
-            # Read data in blocks to avoid URL length limit (max ~2000 chars)
             tasks = []
             for start, count in READ_BLOCKS:
                 tasks.append(self._read_block(start, count))
