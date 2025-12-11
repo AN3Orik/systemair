@@ -8,6 +8,7 @@ from typing import Any, NoReturn
 
 import aiohttp
 import async_timeout
+import orjson
 from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
@@ -666,6 +667,15 @@ class SystemairWebApiClient(SystemairClientBase):
     async def _parse_response(self, response: aiohttp.ClientResponse, *, retry: bool) -> Any:
         """Parse the response."""
         response_body = await response.text()
+
+        if not response_body or response_body.strip() == "":
+            LOGGER.warning("Received empty response from device")
+            if not retry:
+                msg = "Empty response from device"
+                raise SystemairApiClientCommunicationError(msg)
+            await asyncio.sleep(1)
+            return None
+
         if "MB DISCONNECTED" in response_body:
             LOGGER.debug("Received 'MB DISCONNECTED', retrying...")
 
@@ -679,7 +689,16 @@ class SystemairWebApiClient(SystemairClientBase):
             return None
         if "OK" in response_body:
             return response_body
-        return await response.json()
+
+        try:
+            return await response.json()
+        except (ValueError, orjson.JSONDecodeError) as e:
+            LOGGER.warning("Failed to parse JSON response. Body: %s", response_body)
+            if not retry:
+                msg = f"Invalid JSON response: {e}"
+                raise SystemairApiClientCommunicationError(msg) from e
+            await asyncio.sleep(1)
+            return None
 
     async def _api_wrapper(
         self,
@@ -748,7 +767,17 @@ class SystemairWebApiClient(SystemairClientBase):
                 raise SystemairApiClientCommunicationError(msg) from exception
 
             except SystemairApiClientCommunicationError:
-                # Don't retry on MB DISCONNECTED if we've exhausted retries
+                # Retry communication errors (MB DISCONNECTED, empty response, invalid JSON)
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    LOGGER.warning(
+                        "Communication error on attempt %d/%d. Retrying in %.2fs...",
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
                 raise
 
             except Exception as exception:  # pylint: disable=broad-except

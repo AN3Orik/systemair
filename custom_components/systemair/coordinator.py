@@ -137,12 +137,12 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             menu = await self.client.async_get_endpoint("menu")
             unit_version = await self.client.async_get_endpoint("unit_version")
-            self.config_entry.runtime_data.mac_address = menu["mac"]
-            self.config_entry.runtime_data.serial_number = unit_version["System Serial Number"]
-            self.config_entry.runtime_data.mb_hw_version = unit_version["MB HW version"]
-            self.config_entry.runtime_data.mb_model = unit_version["MB Model"]
-            self.config_entry.runtime_data.mb_sw_version = unit_version["MB SW version"]
-            self.config_entry.runtime_data.iam_sw_version = unit_version["IAM SW version"]
+            self.config_entry.runtime_data.mac_address = menu.get("mac", "Unknown")
+            self.config_entry.runtime_data.serial_number = unit_version.get("System Serial Number", "Unknown")
+            self.config_entry.runtime_data.mb_hw_version = unit_version.get("MB HW version", "Unknown")
+            self.config_entry.runtime_data.mb_model = unit_version.get("MB Model", "Unknown")
+            self.config_entry.runtime_data.mb_sw_version = unit_version.get("MB SW version", "Unknown")
+            self.config_entry.runtime_data.iam_sw_version = unit_version.get("IAM SW version", "Unknown")
 
             # Set configuration URL for web interface access
             if hasattr(self.client, "address"):
