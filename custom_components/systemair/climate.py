@@ -10,6 +10,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.components.climate.const import (
+    FAN_OFF,
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
@@ -94,6 +95,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     ]
 
     _attr_fan_modes: ClassVar[list[str]] = [
+        FAN_OFF,
         FAN_LOW,
         FAN_MEDIUM,
         FAN_HIGH,
@@ -131,8 +133,10 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
-        fan_speed = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
-        if fan_speed == 0:
+        # Reflect actual fan state using the "fans running" status,
+        # since schedules/auto can override manual airflow register.
+        fans_running = self.coordinator.get_modbus_data(parameter_map["REG_SPEED_FANS_RUNNING"])  # bool
+        if not fans_running:
             return HVACMode.OFF
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
@@ -233,12 +237,83 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
-        mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
-        return VALUE_TO_FAN_MODE_MAP.get(int(mode), FAN_LOW)
+        # Determine airflow level for the active preset to mirror actual behavior
+        preset = self.preset_mode
+
+        # If fans are not running at all, expose Off
+        fans_running = self.coordinator.get_modbus_data(parameter_map["REG_SPEED_FANS_RUNNING"])  # bool
+        if not fans_running:
+            return FAN_OFF
+
+        # Special handling for Auto: use demand-control fan speed to infer Low/Medium/High
+        if preset == PRESET_MODE_AUTO:
+            # When schedules/demand are active, map current DEMC speed to a coarse level
+            # REG_DEMC_FAN_SPEED is a raw speed indicator; normalize and bucketize
+            try:
+                demc_speed = float(self.coordinator.get_modbus_data(parameter_map["REG_DEMC_FAN_SPEED"]))
+            except Exception:
+                demc_speed = 0.0
+
+            # If speed is not reported but fans are running, fall back to configured IAQ range
+            if demc_speed <= 0:
+                try:
+                    min_level = int(self.coordinator.get_modbus_data(parameter_map["REG_IAQ_SPEED_LEVEL_MIN"]))
+                    max_level = int(self.coordinator.get_modbus_data(parameter_map["REG_IAQ_SPEED_LEVEL_MAX"]))
+                except Exception:
+                    min_level, max_level = 2, 4
+
+                # If IAQ levels look invalid, default to Normal (Medium)
+                if not (2 <= min_level <= 5 and 2 <= max_level <= 5 and min_level <= max_level):
+                    return FAN_MEDIUM
+
+                # Prefer Normal if in range, else closest of Low/High
+                if min_level <= 3 <= max_level:
+                    return FAN_MEDIUM
+                return FAN_LOW if abs(min_level - 3) <= abs(max_level - 3) else FAN_HIGH
+
+            # Normalize by 65535 if values look like 0..65535, else treat as percentage 0..100
+            norm = demc_speed / 65535.0 if demc_speed > 100 else demc_speed / 100.0
+
+            # Map normalized demand to Low/Medium/High (Minimum treated as Low; Maximum as High)
+            if norm < 0.33:
+                return FAN_LOW
+            if norm < 0.66:
+                return FAN_MEDIUM
+            return FAN_HIGH
+
+        # Default to preset-specific configured airflow level
+        level_param_key = "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"
+
+        if preset == PRESET_MODE_CROWDED:
+            level_param_key = "REG_USERMODE_CROWDED_AIRFLOW_LEVEL_SAF"
+        elif preset == PRESET_MODE_REFRESH:
+            level_param_key = "REG_USERMODE_REFRESH_AIRFLOW_LEVEL_SAF"
+        elif preset == PRESET_MODE_FIREPLACE:
+            level_param_key = "REG_USERMODE_FIREPLACE_AIRFLOW_LEVEL_SAF"
+        elif preset == PRESET_MODE_AWAY:
+            level_param_key = "REG_USERMODE_AWAY_AIRFLOW_LEVEL_SAF"
+        # PRESET_MODE_HOLIDAY falls back to manual level setting.
+
+        raw_level = int(self.coordinator.get_modbus_data(parameter_map[level_param_key]))
+
+        # Map unexpected values to nearest supported fan mode
+        # Allowed levels in UI: 2(Low), 3(Medium), 4(High)
+        if raw_level <= 1:
+            mapped = 2
+        elif raw_level >= 4:
+            mapped = 4
+        else:
+            mapped = raw_level
+
+        return VALUE_TO_FAN_MODE_MAP.get(mapped, FAN_LOW)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode."""
-        mode = FAN_MODE_TO_VALUE_MAP[fan_mode]
+        # Handle explicit Off
+        if fan_mode == FAN_OFF:
+            mode = 0
+        else:
+            mode = FAN_MODE_TO_VALUE_MAP[fan_mode]
         try:
             await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], mode)
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:

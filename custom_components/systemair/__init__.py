@@ -22,6 +22,7 @@ from .const import (
     CONF_SLAVE_ID,
     CONF_STOPBITS,
     CONF_WEB_API_MAX_REGISTERS,
+    CONF_WEB_API_INTER_CHUNK_DELAY_MS,
     DEFAULT_WEB_API_MAX_REGISTERS,
 )
 from .coordinator import SystemairDataUpdateCoordinator
@@ -49,10 +50,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
 
     if api_type == API_TYPE_MODBUS_WEBAPI:
         max_registers = entry.options.get(CONF_WEB_API_MAX_REGISTERS, DEFAULT_WEB_API_MAX_REGISTERS)
+        inter_chunk_delay_ms = int(entry.options.get(CONF_WEB_API_INTER_CHUNK_DELAY_MS, 100))
         client = SystemairWebApiClient(
             address=entry.data[CONF_IP_ADDRESS],
             session=async_get_clientsession(hass),
             max_registers_per_request=max_registers,
+            inter_chunk_delay_ms=inter_chunk_delay_ms,
         )
     elif api_type == API_TYPE_MODBUS_SERIAL:
         client = SystemairSerialClient(

@@ -30,6 +30,10 @@ from .const import (
     CONF_SLAVE_ID,
     CONF_STOPBITS,
     CONF_WEB_API_MAX_REGISTERS,
+    CONF_WEB_API_INTER_CHUNK_DELAY_MS,
+    CONF_STATUS_POLL_INTERVAL,
+    CONF_CONFIG_POLL_INTERVAL,
+    CONF_STATUS_OFF_SKIP_FACTOR,
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
     DEFAULT_PARITY,
@@ -38,6 +42,9 @@ from .const import (
     DEFAULT_SLAVE_ID,
     DEFAULT_STOPBITS,
     DEFAULT_WEB_API_MAX_REGISTERS,
+    DEFAULT_STATUS_POLL_INTERVAL,
+    DEFAULT_WEB_API_CONFIG_POLL_INTERVAL,
+    DEFAULT_STATUS_OFF_SKIP_FACTOR,
     DOMAIN,
     LOGGER,
     MODEL_SPECS,
@@ -358,6 +365,62 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
                 selector.NumberSelectorConfig(
                     min=30,
                     max=125,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+
+            # Inter-chunk delay between Web API requests (ms)
+            default_chunk_delay = self.config_entry.options.get(CONF_WEB_API_INTER_CHUNK_DELAY_MS, 100)
+            schema_dict[
+                vol.Optional(CONF_WEB_API_INTER_CHUNK_DELAY_MS, default=int(default_chunk_delay))
+            ] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=500,
+                    unit_of_measurement="ms",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+
+            # Polling intervals (status + config)
+            default_status_interval = self.config_entry.options.get(
+                CONF_STATUS_POLL_INTERVAL, DEFAULT_STATUS_POLL_INTERVAL
+            )
+            default_config_interval = self.config_entry.options.get(
+                CONF_CONFIG_POLL_INTERVAL, DEFAULT_WEB_API_CONFIG_POLL_INTERVAL
+            )
+
+            schema_dict[
+                vol.Optional(CONF_STATUS_POLL_INTERVAL, default=int(default_status_interval))
+            ] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=60,
+                    unit_of_measurement="s",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+            schema_dict[
+                vol.Optional(CONF_CONFIG_POLL_INTERVAL, default=int(default_config_interval))
+            ] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=60,
+                    max=7200,
+                    unit_of_measurement="s",
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+
+            # Duty-cycling when fans are off: poll every N status intervals
+            default_off_skip = self.config_entry.options.get(
+                CONF_STATUS_OFF_SKIP_FACTOR, DEFAULT_STATUS_OFF_SKIP_FACTOR
+            )
+            schema_dict[
+                vol.Optional(CONF_STATUS_OFF_SKIP_FACTOR, default=int(default_off_skip))
+            ] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=30,
                     mode=selector.NumberSelectorMode.BOX,
                 )
             )
