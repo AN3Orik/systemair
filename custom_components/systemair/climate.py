@@ -280,11 +280,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
             except (ValueError, TypeError, KeyError):
                 min_level, max_level = IAQ_DEFAULT_MIN, IAQ_DEFAULT_MAX
 
-            if not (
-                IAQ_LEVEL_MIN <= min_level <= IAQ_LEVEL_MAX
-                and IAQ_LEVEL_MIN <= max_level <= IAQ_LEVEL_MAX
-                and min_level <= max_level
-            ):
+            if not (IAQ_LEVEL_MIN <= min_level <= IAQ_LEVEL_MAX and IAQ_LEVEL_MIN <= max_level <= IAQ_LEVEL_MAX and min_level <= max_level):
                 return FAN_MEDIUM
 
             if min_level <= IAQ_LEVEL_NORMAL <= max_level:

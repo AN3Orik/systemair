@@ -82,9 +82,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass=hass,
             logger=LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=int(
-                self.config_entry.options.get(CONF_STATUS_POLL_INTERVAL, DEFAULT_STATUS_POLL_INTERVAL)
-            )),
+            update_interval=timedelta(seconds=int(self.config_entry.options.get(CONF_STATUS_POLL_INTERVAL, DEFAULT_STATUS_POLL_INTERVAL))),
         )
 
     def register_modbus_parameters(self, modbus_parameter: ModbusParameter) -> None:

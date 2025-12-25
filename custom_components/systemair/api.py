@@ -739,12 +739,15 @@ class SystemairWebApiClient(SystemairClientBase):
 
         for attempt in range(max_retries):
             try:
-                async with async_timeout.timeout(10), self._session.request(
-                    method=method,
-                    url=url,
-                    headers=all_headers,
-                    json=data,
-                ) as response:
+                async with (
+                    async_timeout.timeout(10),
+                    self._session.request(
+                        method=method,
+                        url=url,
+                        headers=all_headers,
+                        json=data,
+                    ) as response,
+                ):
                     # Retry on transient HTTP statuses
                     if response.status in (408, 409, 423, 429, 500, 502, 503, 504):
                         if attempt < max_retries - 1:
