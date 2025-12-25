@@ -78,8 +78,9 @@ class SystemairApiClientCommunicationError(
     """Exception to indicate a communication error."""
 
 
-class SystemairApiClientTemporaryUnavailable(SystemairApiClientCommunicationError):
-    """Exception to indicate the device/API is temporarily unavailable.
+class SystemairApiClientTemporaryUnavailableError(SystemairApiClientCommunicationError):
+    """
+    Exception to indicate the device/API is temporarily unavailable.
 
     Raised on known transient bodies like 'MB DISCONNECTED' or 'ERROR' returned
     by the Systemair IAM Web API, signalling the backend Modbus is not ready.
@@ -702,7 +703,7 @@ class SystemairWebApiClient(SystemairClientBase):
 
             if not retry:
                 msg = response_body.strip()
-                raise SystemairApiClientTemporaryUnavailable(msg)
+                raise SystemairApiClientTemporaryUnavailableError(msg)
 
             await asyncio.sleep(1)
             return None
@@ -726,66 +727,56 @@ class SystemairWebApiClient(SystemairClientBase):
         data: dict | None = None,
         headers: dict | None = None,
     ) -> Any:
-        """Get information from the API with robust retry logic.
+        """
+        Get information from the API with robust retry logic.
 
         Adds defensive headers and explicitly retries non-200 responses.
         """
         max_retries = 5
         base_delay = 0.2
 
-        # Default headers to work around some embedded HTTP servers misbehaving
-        # with long-lived keep-alive connections and unexpected content types.
-        default_headers = {
-            "Accept": "application/json, text/plain;q=0.8, */*;q=0.5",
-            # Force the server to close the TCP connection after each request to
-            # avoid rare 24h stalls seen on some Systemair IAM firmwares.
-            "Connection": "close",
-        }
-
-        # Merge headers if provided by caller
-        all_headers = {**default_headers, **(headers or {})}
+        all_headers = self._merge_headers(headers)
 
         for attempt in range(max_retries):
             try:
-                async with async_timeout.timeout(10):
-                    async with self._session.request(
-                        method=method,
-                        url=url,
-                        headers=all_headers,
-                        json=data,
-                    ) as response:
-                        # Retry on transient HTTP statuses
-                        if response.status in (408, 409, 423, 429, 500, 502, 503, 504):
-                            if attempt < max_retries - 1:
-                                delay = base_delay * (2**attempt)
-                                LOGGER.warning(
-                                    "HTTP %s on attempt %d/%d for %s. Retrying in %.2fs...",
-                                    response.status,
-                                    attempt + 1,
-                                    max_retries,
-                                    url,
-                                    delay,
-                                )
-                                await asyncio.sleep(delay)
-                                continue
-                            msg = f"HTTP error {response.status} after {max_retries} attempts"
-                            raise SystemairApiClientCommunicationError(msg)
-
-                        parsed_response = await self._parse_response(response, retry=attempt < max_retries - 1)
-
-                        if parsed_response is None:
-                            # MB DISCONNECTED - retry with exponential backoff
+                async with async_timeout.timeout(10), self._session.request(
+                    method=method,
+                    url=url,
+                    headers=all_headers,
+                    json=data,
+                ) as response:
+                    # Retry on transient HTTP statuses
+                    if response.status in (408, 409, 423, 429, 500, 502, 503, 504):
+                        if attempt < max_retries - 1:
                             delay = base_delay * (2**attempt)
-                            LOGGER.debug(
-                                "Device disconnected on attempt %d/%d. Retrying in %.2fs...",
+                            LOGGER.warning(
+                                "HTTP %s on attempt %d/%d for %s. Retrying in %.2fs...",
+                                response.status,
                                 attempt + 1,
                                 max_retries,
+                                url,
                                 delay,
                             )
                             await asyncio.sleep(delay)
                             continue
+                        msg = f"HTTP error {response.status} after {max_retries} attempts"
+                        self._raise_comm_error(msg)
 
-                        return parsed_response
+                    parsed_response = await self._parse_response(response, retry=attempt < max_retries - 1)
+
+                    if parsed_response is None:
+                        # MB DISCONNECTED - retry with exponential backoff
+                        delay = base_delay * (2**attempt)
+                        LOGGER.debug(
+                            "Device disconnected on attempt %d/%d. Retrying in %.2fs...",
+                            attempt + 1,
+                            max_retries,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    return parsed_response
 
             except TimeoutError as exception:
                 if attempt < max_retries - 1:
@@ -800,7 +791,7 @@ class SystemairWebApiClient(SystemairClientBase):
                     await asyncio.sleep(delay)
                     continue
                 msg = f"Timeout error after {max_retries} attempts - {exception}"
-                raise SystemairApiClientCommunicationError(msg) from exception
+                self._raise_comm_error(msg)
 
             except (aiohttp.ClientError, socket.gaierror) as exception:
                 if attempt < max_retries - 1:
@@ -815,7 +806,7 @@ class SystemairWebApiClient(SystemairClientBase):
                     await asyncio.sleep(delay)
                     continue
                 msg = f"Connection error after {max_retries} attempts - {exception}"
-                raise SystemairApiClientCommunicationError(msg) from exception
+                self._raise_comm_error(msg)
 
             except SystemairApiClientCommunicationError:
                 # Retry communication errors (MB DISCONNECTED, empty response, invalid JSON)
@@ -831,10 +822,25 @@ class SystemairWebApiClient(SystemairClientBase):
                     continue
                 raise
 
-            except Exception as exception:  # pylint: disable=broad-except
+            except Exception as exception:  # pylint: disable=broad-except  # noqa: BLE001
                 LOGGER.error("Unexpected error during API request: %s", exception, exc_info=True)
                 msg = f"Unexpected error - {exception}"
-                raise SystemairApiClientError(msg) from exception
+                self._raise_api_error(msg)
 
         msg = f"Failed to execute API request after {max_retries} attempts"
-        raise SystemairApiClientError(msg)
+        self._raise_api_error(msg)
+        return None
+
+    def _raise_comm_error(self, message: str) -> None:
+        raise SystemairApiClientCommunicationError(message)
+
+    def _raise_api_error(self, message: str) -> None:
+        raise SystemairApiClientError(message)
+
+    def _merge_headers(self, headers: dict | None) -> dict:
+        """Build default headers and merge with caller-provided headers."""
+        default_headers = {
+            "Accept": "application/json, text/plain;q=0.8, */*;q=0.5",
+            "Connection": "close",
+        }
+        return {**default_headers, **(headers or {})}

@@ -21,8 +21,8 @@ from .const import (
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
-    CONF_WEB_API_MAX_REGISTERS,
     CONF_WEB_API_INTER_CHUNK_DELAY_MS,
+    CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_WEB_API_MAX_REGISTERS,
 )
 from .coordinator import SystemairDataUpdateCoordinator

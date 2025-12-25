@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.exceptions import HomeAssistantError
@@ -10,21 +10,21 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import (
     ModbusConnectionError,
-    SystemairApiClientError,
     SystemairApiClientCommunicationError,
-    SystemairApiClientTemporaryUnavailable,
+    SystemairApiClientError,
+    SystemairApiClientTemporaryUnavailableError,
     SystemairClientBase,
     SystemairWebApiClient,
 )
 from .const import (
+    CONF_CONFIG_POLL_INTERVAL,
+    CONF_STATUS_OFF_SKIP_FACTOR,
+    CONF_STATUS_POLL_INTERVAL,
+    DEFAULT_STATUS_OFF_SKIP_FACTOR,
+    DEFAULT_STATUS_POLL_INTERVAL,
+    DEFAULT_WEB_API_CONFIG_POLL_INTERVAL,
     DOMAIN,
     LOGGER,
-    DEFAULT_WEB_API_CONFIG_POLL_INTERVAL,
-    CONF_STATUS_POLL_INTERVAL,
-    CONF_CONFIG_POLL_INTERVAL,
-    DEFAULT_STATUS_POLL_INTERVAL,
-    CONF_STATUS_OFF_SKIP_FACTOR,
-    DEFAULT_STATUS_OFF_SKIP_FACTOR,
 )
 from .modbus import IntegerType, RegisterType, parameter_map
 
@@ -205,79 +205,70 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not self._status_parameters and not self._config_parameters:
                 return await self.client.get_all_data()
 
-            # 1) Status (Input registers) — always unless offline cooldown active
-            now = datetime.utcnow()
-            skip_status = self._offline_until is not None and now < self._offline_until
-            # Duty-cycle when fans are off using cached value
-            fans_key = str(parameter_map["REG_SPEED_FANS_RUNNING"].register - 1)
-            cached_fans_val = (self.data or {}).get(fans_key)
-            fans_running_cached = True if cached_fans_val is None else bool(cached_fans_val)
-            # Reset counter when fans running
-            if fans_running_cached:
-                self._status_off_skip_counter = 0
+            now = datetime.now(UTC)
+            merged = await self._maybe_poll_status(now, merged)
 
-            if self._status_parameters and not skip_status:
-                # Apply off-duty skip (only when known-off and not in cooldown)
-                if not fans_running_cached and self._status_off_skip_factor > 1:
-                    if self._status_off_skip_counter < self._status_off_skip_factor - 1:
-                        self._status_off_skip_counter += 1
-                        LOGGER.debug(
-                            "Fans off; skipping status poll %d/%d; serving cached.",
-                            self._status_off_skip_counter,
-                            self._status_off_skip_factor - 1,
-                        )
-                        return merged
-                    # Time to poll this cycle
-                    self._status_off_skip_counter = 0
-                try:
-                    status_data = await self.client.async_get_data(self._status_parameters)
-                    merged.update(status_data)
-                    # Reset offline cooldown on success
-                    self._offline_until = None
-                    self._offline_cooldown_sec = 0
-                except (SystemairApiClientTemporaryUnavailable, SystemairApiClientCommunicationError) as exc:
-                    # Enter/extend cooldown and serve cached data without failing availability
-                    self._offline_cooldown_sec = max(30, self._offline_cooldown_sec * 2 or 30)
-                    self._offline_cooldown_sec = min(self._offline_cooldown_sec, self._offline_cooldown_max_sec)
-                    self._offline_until = now + timedelta(seconds=self._offline_cooldown_sec)
-                    LOGGER.warning(
-                        "Status poll temporarily unavailable (%s). Cooldown %ds; serving cached.",
-                        exc,
-                        self._offline_cooldown_sec,
-                    )
-                    # Do not raise; keep merged cache
-                except (ModbusConnectionError, SystemairApiClientError) as exc:
-                    # Non-communication errors should still fail the cycle
-                    raise UpdateFailed(exc) from exc
-            elif skip_status:
-                LOGGER.debug("Skipping status poll during offline cooldown; serving cached data.")
-
-            # 2) Config (Holding registers) — only when due or forced
-            do_config_poll = False
-            # Reuse 'now' defined above
-            if self._force_next_config_poll:
-                do_config_poll = True
-            elif self._last_config_poll is None:
-                do_config_poll = True
-            else:
-                elapsed = (now - self._last_config_poll).total_seconds()
-                do_config_poll = elapsed >= self._config_poll_interval_sec
-
-            # If offline cooldown active, skip config poll to reduce load
-            if do_config_poll and self._config_parameters and not (self._offline_until and now < self._offline_until):
-                try:
-                    config_data = await self.client.async_get_data(self._config_parameters)
-                    merged.update(config_data)
-                    self._last_config_poll = now
-                except (ModbusConnectionError, SystemairApiClientError) as exc:
-                    # Config read failure should not drop availability; log and continue
-                    LOGGER.warning("Config poll failed: %s", exc)
-                finally:
-                    self._force_next_config_poll = False
-            elif do_config_poll and (self._offline_until and now < self._offline_until):
-                LOGGER.debug("Skipping config poll during offline cooldown.")
-
-            return merged
+            return await self._maybe_poll_config(now, merged)
 
         except (ModbusConnectionError, SystemairApiClientError) as exception:
             raise UpdateFailed(exception) from exception
+
+    async def _maybe_poll_status(self, now: datetime, merged: dict[str, Any]) -> dict[str, Any]:
+        skip_status = self._offline_until is not None and now < self._offline_until
+        fans_key = str(parameter_map["REG_SPEED_FANS_RUNNING"].register - 1)
+        cached_fans_val = (self.data or {}).get(fans_key)
+        fans_running_cached = True if cached_fans_val is None else bool(cached_fans_val)
+        if fans_running_cached:
+            self._status_off_skip_counter = 0
+
+        if self._status_parameters and not skip_status:
+            if not fans_running_cached and self._status_off_skip_factor > 1:
+                if self._status_off_skip_counter < self._status_off_skip_factor - 1:
+                    self._status_off_skip_counter += 1
+                    LOGGER.debug(
+                        "Fans off; skipping status poll %d/%d; serving cached.",
+                        self._status_off_skip_counter,
+                        self._status_off_skip_factor - 1,
+                    )
+                    return merged
+                self._status_off_skip_counter = 0
+            try:
+                status_data = await self.client.async_get_data(self._status_parameters)
+                merged.update(status_data)
+                self._offline_until = None
+                self._offline_cooldown_sec = 0
+            except (SystemairApiClientTemporaryUnavailableError, SystemairApiClientCommunicationError) as exc:
+                self._offline_cooldown_sec = max(30, self._offline_cooldown_sec * 2 or 30)
+                self._offline_cooldown_sec = min(self._offline_cooldown_sec, self._offline_cooldown_max_sec)
+                self._offline_until = now + timedelta(seconds=self._offline_cooldown_sec)
+                LOGGER.warning(
+                    "Status poll temporarily unavailable (%s). Cooldown %ds; serving cached.",
+                    exc,
+                    self._offline_cooldown_sec,
+                )
+            except (ModbusConnectionError, SystemairApiClientError) as exc:
+                raise UpdateFailed(exc) from exc
+        elif skip_status:
+            LOGGER.debug("Skipping status poll during offline cooldown; serving cached data.")
+        return merged
+
+    async def _maybe_poll_config(self, now: datetime, merged: dict[str, Any]) -> dict[str, Any]:
+        do_config_poll = False
+        if self._force_next_config_poll or self._last_config_poll is None:
+            do_config_poll = True
+        else:
+            elapsed = (now - self._last_config_poll).total_seconds()
+            do_config_poll = elapsed >= self._config_poll_interval_sec
+
+        if do_config_poll and self._config_parameters and not (self._offline_until and now < self._offline_until):
+            try:
+                config_data = await self.client.async_get_data(self._config_parameters)
+                merged.update(config_data)
+                self._last_config_poll = now
+            except (ModbusConnectionError, SystemairApiClientError) as exc:
+                LOGGER.warning("Config poll failed: %s", exc)
+            finally:
+                self._force_next_config_poll = False
+        elif do_config_poll and (self._offline_until and now < self._offline_until):
+            LOGGER.debug("Skipping config poll during offline cooldown.")
+        return merged
