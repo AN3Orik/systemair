@@ -12,9 +12,18 @@ CONF_MODEL = "model"
 CONF_SLAVE_ID = "slave_id"
 CONF_API_TYPE = "api_type"
 CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
+CONF_WEB_API_INTER_CHUNK_DELAY_MS = "web_api_inter_chunk_delay_ms"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
 DEFAULT_WEB_API_MAX_REGISTERS = 70
+DEFAULT_WEB_API_CONFIG_POLL_INTERVAL = 300  # seconds; poll config (Holding) less often
+
+# Polling intervals (options)
+CONF_STATUS_POLL_INTERVAL = "status_poll_interval"
+CONF_CONFIG_POLL_INTERVAL = "config_poll_interval"
+DEFAULT_STATUS_POLL_INTERVAL = 5  # seconds; coordinator update interval
+CONF_STATUS_OFF_SKIP_FACTOR = "status_off_skip_factor"
+DEFAULT_STATUS_OFF_SKIP_FACTOR = 6  # when fans are off, poll 1 in N cycles
 
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"
