@@ -14,7 +14,14 @@ from .api import (
     SystemairClientBase,
     SystemairWebApiClient,
 )
-from .const import DOMAIN, LOGGER
+
+from .const import (
+    DOMAIN, 
+    LOGGER, 
+    CONF_UPDATE_INTERVAL, 
+    DEFAULT_UPDATE_INTERVAL
+)
+
 from .modbus import IntegerType, parameter_map
 
 if TYPE_CHECKING:
@@ -50,11 +57,14 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self.modbus_parameters: list[ModbusParameter] = []
 
+        # Get update interval from options, fallback to default
+        update_interval = config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+
         super().__init__(
             hass=hass,
             logger=LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=10),
+            update_interval=timedelta(seconds=update_interval),
         )
 
     def register_modbus_parameters(self, modbus_parameter: ModbusParameter) -> None:

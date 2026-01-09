@@ -45,6 +45,8 @@ from .const import (
     SERIAL_BYTESIZES,
     SERIAL_PARITIES,
     SERIAL_STOPBITS,
+    CONF_UPDATE_INTERVAL, 
+    DEFAULT_UPDATE_INTERVAL,
 )
 
 
@@ -339,14 +341,24 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
+        default_update_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         api_type = self.config_entry.data.get(CONF_API_TYPE)
 
-        # Base schema with model selection
+        # Base schema with model selection and update interval
         schema_dict = {
             vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=list(MODEL_SPECS.keys()),
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=10,
+                    max=300,
+                    step=1,
+                    unit_of_measurement="seconds",
+                    mode=selector.NumberSelectorMode.BOX,
                 )
             ),
         }

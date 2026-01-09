@@ -16,6 +16,10 @@ DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
 DEFAULT_WEB_API_MAX_REGISTERS = 70
 
+# --- Making update interval configurable ---
+CONF_UPDATE_INTERVAL = "update_interval"
+DEFAULT_UPDATE_INTERVAL = 60
+
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"
 API_TYPE_MODBUS_WEBAPI = "modbus_webapi"
