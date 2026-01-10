@@ -134,8 +134,8 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
-        fans_running = self.coordinator.get_modbus_data(parameter_map["REG_SPEED_FANS_RUNNING"])
-        if not fans_running:
+        fan_speed = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
+        if fan_speed == 0:
             return HVACMode.OFF
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
@@ -236,9 +236,6 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
-        fans_running = self.coordinator.get_modbus_data(parameter_map["REG_SPEED_FANS_RUNNING"])
-        if not fans_running:
-            return FAN_OFF
         mode = int(self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]))
         return VALUE_TO_FAN_MODE_MAP.get(mode, FAN_LOW)
 
