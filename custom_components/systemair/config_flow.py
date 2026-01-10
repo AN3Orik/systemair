@@ -29,6 +29,7 @@ from .const import (
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
+    CONF_UPDATE_INTERVAL,
     CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
@@ -37,6 +38,7 @@ from .const import (
     DEFAULT_SERIAL_PORT,
     DEFAULT_SLAVE_ID,
     DEFAULT_STOPBITS,
+    DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
     DOMAIN,
     LOGGER,
@@ -341,12 +343,24 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
         api_type = self.config_entry.data.get(CONF_API_TYPE)
 
-        # Base schema with model selection
+        # Get current update interval
+        default_update_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+
+        # Base schema with model selection and update interval
         schema_dict = {
             vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=list(MODEL_SPECS.keys()),
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=10,
+                    max=120,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s",
                 )
             ),
         }

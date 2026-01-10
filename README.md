@@ -116,6 +116,18 @@ Configure connection to SAVECONNECT 2.0 IAM module:
 
 You can change the model at any time after installation by navigating to the integration's page and clicking **Configure**.
 
+## Integration Options
+
+After installation, configure these options via **Settings > Devices & Services > Systemair > Configure**:
+
+| Option | Range | Default | Description |
+|--------|-------|---------|-------------|
+| Ventilation Unit Model | — | VSR 300 | Select your unit model for accurate power calculations |
+| Update Interval | 10-120s | 60s | How often to poll the device for updates |
+| Max Registers per Web API Request | 30-125 | 70 | Registers per request (Web API only) |
+
+> **⚠️ Note:** Some units (e.g., VTR 300) may experience Modbus communication hangs with low update intervals. If you experience connectivity issues, increase the update interval. Lowering below default is at your own risk.
+
 ## Entities Provided
 
 This integration creates a single device for your ventilation unit with the following entities:

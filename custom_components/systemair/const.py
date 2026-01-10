@@ -12,9 +12,11 @@ CONF_MODEL = "model"
 CONF_SLAVE_ID = "slave_id"
 CONF_API_TYPE = "api_type"
 CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
+CONF_UPDATE_INTERVAL = "update_interval"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
 DEFAULT_WEB_API_MAX_REGISTERS = 70
+DEFAULT_UPDATE_INTERVAL = 60
 
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"

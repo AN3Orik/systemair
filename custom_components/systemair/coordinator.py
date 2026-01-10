@@ -42,6 +42,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         client: SystemairClientBase,
         config_entry: SystemairConfigEntry,
+        update_interval_seconds: int = 60,
     ) -> None:
         """Initialize."""
         self.client = client
@@ -54,7 +55,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass=hass,
             logger=LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=10),
+            update_interval=timedelta(seconds=update_interval_seconds),
         )
 
     def register_modbus_parameters(self, modbus_parameter: ModbusParameter) -> None:
