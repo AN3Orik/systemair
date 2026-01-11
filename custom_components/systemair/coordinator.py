@@ -14,14 +14,7 @@ from .api import (
     SystemairClientBase,
     SystemairWebApiClient,
 )
-
-from .const import (
-    DOMAIN, 
-    LOGGER, 
-    CONF_UPDATE_INTERVAL, 
-    DEFAULT_UPDATE_INTERVAL
-)
-
+from .const import DOMAIN, LOGGER
 from .modbus import IntegerType, parameter_map
 
 if TYPE_CHECKING:
@@ -49,6 +42,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         client: SystemairClientBase,
         config_entry: SystemairConfigEntry,
+        update_interval_seconds: int = 60,
     ) -> None:
         """Initialize."""
         self.client = client
@@ -57,14 +51,11 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self.modbus_parameters: list[ModbusParameter] = []
 
-        # Get update interval from options, fallback to default
-        update_interval = config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-
         super().__init__(
             hass=hass,
             logger=LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=update_interval),
+            update_interval=timedelta(seconds=update_interval_seconds),
         )
 
     def register_modbus_parameters(self, modbus_parameter: ModbusParameter) -> None:

@@ -13,6 +13,7 @@ from homeassistant.components.climate.const import (
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
+    FAN_OFF,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, UnitOfTemperature
@@ -60,6 +61,7 @@ PRESET_MODE_TO_VALUE_MAP = {
 VALUE_TO_PRESET_MODE_MAP = {value - 1: key for key, value in PRESET_MODE_TO_VALUE_MAP.items()}
 
 FAN_MODE_TO_VALUE_MAP = {
+    FAN_OFF: 0,
     FAN_LOW: 2,
     FAN_MEDIUM: 3,
     FAN_HIGH: 4,
@@ -94,6 +96,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     ]
 
     _attr_fan_modes: ClassVar[list[str]] = [
+        FAN_OFF,
         FAN_LOW,
         FAN_MEDIUM,
         FAN_HIGH,
@@ -233,8 +236,8 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
-        mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
-        return VALUE_TO_FAN_MODE_MAP.get(int(mode), FAN_LOW)
+        mode = int(self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]))
+        return VALUE_TO_FAN_MODE_MAP.get(mode, FAN_LOW)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode."""

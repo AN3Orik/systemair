@@ -21,7 +21,9 @@ from .const import (
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
+    CONF_UPDATE_INTERVAL,
     CONF_WEB_API_MAX_REGISTERS,
+    DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
 )
 from .coordinator import SystemairDataUpdateCoordinator
@@ -73,7 +75,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         )
         await client.start()
 
-    coordinator = SystemairDataUpdateCoordinator(hass=hass, client=client, config_entry=entry)
+    update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    coordinator = SystemairDataUpdateCoordinator(
+        hass=hass,
+        client=client,
+        config_entry=entry,
+        update_interval_seconds=update_interval,
+    )
 
     model = entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "VSR 300"))
 
