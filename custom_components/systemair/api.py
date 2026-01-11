@@ -31,27 +31,27 @@ WEB_API_MAX_REGISTERS_PER_REQUEST = 70
 
 READ_BLOCKS = [
     (1001, 62),
-    (1101, 80),
-    (1271, 4),
-    (1353, 1),
-    (2001, 125),
-    (2126, 24),
-    (2317, 2),
-    (2419, 1),
-    (2453, 1),
-    (2505, 1),
+    (1101, 88),    # Increased from 80 to 88 to cover 1181-1188
+    (1201, 74),    # NEW: Covers 1201-1274 (Fans, Outdoor comp, Regulation)
+    (1351, 3),     # NEW: Covers 1351-1353 (Fan running status + Stop allowed)
+    (2001, 125),   # Covers 2001-2125
+    (2126, 24),    # Covers 2126-2149
+    (2201, 63),    # NEW: Covers 2201-2263 (Rotor)
+    (2311, 8),     # Modified: Covers 2311-2318 (Cooler)
+    (2401, 53),    # Modified: Covers 2401-2453 (Extra Controller + Change over)
+    (2504, 18),    # Modified: Covers 2504-2521 (ECO Mode)
     (3002, 116),
     (4001, 12),
-    (4100, 1),
-    (7005, 2),
-    (12102, 40),
-    (12306, 12),
-    (12401, 2),
+    (4101, 20),    # Modified: Covers 4101-4120 (Free Cooling)
+    (7001, 6),     # Modified: Covers 7001-7006 (Filter)
+    (12101, 41),   # Modified: Start 12101 to cover FPT (was 12102)
+    (12301, 17),   # Modified: Start 12301 to cover DI inputs (was 12306)
+    (12401, 5),    # Modified: Increased count to cover 12405
     (12544, 1),
     (14001, 4),
     (14101, 5),
-    (14201, 2),
-    (14301, 6),
+    (14201, 4),    # Modified: Increased count to cover 14203-14204
+    (14301, 11),   # Modified: Increased count to cover 14307-14311
     (14381, 1),
     (15016, 125),
     (15141, 125),
@@ -60,7 +60,7 @@ READ_BLOCKS = [
     (15516, 125),
     (15641, 125),
     (15766, 125),
-    (15891, 13),
+    (15891, 20),   # Modified: Increased count to cover 15905-15910
 ]
 
 
