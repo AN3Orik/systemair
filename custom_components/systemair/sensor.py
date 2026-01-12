@@ -23,7 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import MODEL_SPECS
+from .const import MODEL_SPECS, CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
 from .entity import SystemairEntity
 from .modbus import (
     ModbusParameter,
@@ -423,14 +423,27 @@ class SystemairSensor(SystemairEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
 
     @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if self.entity_description.key == "alarm_history":
+            return self.coordinator.config_entry.options.get(
+                CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
+            ) and super().available
+        return super().available
+
+    @property
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
         if self.coordinator.data is None:
             return None
 
         key = self.entity_description.key
-
         if key == "alarm_history":
+            if not self.coordinator.config_entry.options.get(
+                CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
+            ):
+                return None
+
             first_log = alarm_log_registers[0]
             alarm_id_reg = first_log["id"]
             alarm_id = self.coordinator.data.get(str(alarm_id_reg - 1))

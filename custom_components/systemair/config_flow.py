@@ -31,6 +31,7 @@ from .const import (
     CONF_STOPBITS,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_API_MAX_REGISTERS,
+    CONF_ENABLE_ALARM_HISTORY,
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
     DEFAULT_PARITY,
@@ -40,6 +41,7 @@ from .const import (
     DEFAULT_STOPBITS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
+    DEFAULT_ENABLE_ALARM_HISTORY,
     DOMAIN,
     LOGGER,
     MODEL_SPECS,
@@ -343,8 +345,9 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
         api_type = self.config_entry.data.get(CONF_API_TYPE)
 
-        # Get current update interval
+        # Get current update interval & alarm history
         default_update_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        default_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
 
         # Base schema with model selection and update interval
         schema_dict = {
@@ -375,6 +378,8 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
                     mode=selector.NumberSelectorMode.BOX,
                 )
             )
+
+        schema_dict[vol.Optional(CONF_ENABLE_ALARM_HISTORY, default=default_alarm_history)] = selector.BooleanSelector()
 
         return self.async_show_form(
             step_id="init",
