@@ -150,7 +150,6 @@ ENTITY_DESCRIPTIONS = (
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_OUTPUT_WS_RUNNING_SCHEDULED"],
     ),
-    
 )
 
 
