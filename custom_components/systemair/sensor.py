@@ -426,9 +426,7 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         if self.entity_description.key == "alarm_history":
-            return self.coordinator.config_entry.options.get(
-                CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
-            ) and super().available
+            return self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY) and super().available
         return super().available
 
     @property
@@ -439,9 +437,7 @@ class SystemairSensor(SystemairEntity, SensorEntity):
 
         key = self.entity_description.key
         if key == "alarm_history":
-            if not self.coordinator.config_entry.options.get(
-                CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
-            ):
+            if not self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY):
                 return None
 
             first_log = alarm_log_registers[0]

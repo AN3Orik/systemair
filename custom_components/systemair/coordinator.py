@@ -158,9 +158,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
-            enable_alarm_history = self.config_entry.options.get(
-                CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
-            )
+            enable_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
             if self._is_webapi:
                 if self.modbus_parameters:
                     return await self.client.async_get_data(self.modbus_parameters)
