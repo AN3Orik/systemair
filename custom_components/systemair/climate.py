@@ -183,11 +183,17 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_TRIAC"])
         cooler = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_Y3_DIGITAL"])
+        saf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        eaf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
 
         if heater:
             return HVACAction.HEATING
         if cooler:
             return HVACAction.COOLING
+        
+        # If both fans are stopped, the unit is idle (e.g. stopped by schedule)
+        if saf_output == 0 and eaf_output == 0:
+            return HVACAction.IDLE
 
         return HVACAction.FAN
 
@@ -236,6 +242,10 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
+        saf_output = int(self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"]))
+        if saf_output == 0:
+            return FAN_OFF
+            
         mode = int(self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]))
         return VALUE_TO_FAN_MODE_MAP.get(mode, FAN_LOW)
 
