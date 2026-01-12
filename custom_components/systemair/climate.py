@@ -190,7 +190,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
             return HVACAction.HEATING
         if cooler:
             return HVACAction.COOLING
-        
+
         # If both fans are stopped, the unit is idle (e.g. stopped by schedule)
         if saf_output == 0 and eaf_output == 0:
             return HVACAction.IDLE
@@ -245,7 +245,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         saf_output = int(self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"]))
         if saf_output == 0:
             return FAN_OFF
-            
+
         mode = int(self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]))
         return VALUE_TO_FAN_MODE_MAP.get(mode, FAN_LOW)
 
