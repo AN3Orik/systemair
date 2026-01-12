@@ -23,7 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import MODEL_SPECS, CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
+from .const import CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY, MODEL_SPECS
 from .entity import SystemairEntity
 from .modbus import (
     ModbusParameter,

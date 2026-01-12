@@ -14,7 +14,7 @@ from .api import (
     SystemairClientBase,
     SystemairWebApiClient,
 )
-from .const import DOMAIN, LOGGER, CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY
+from .const import CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY, DOMAIN, LOGGER
 from .modbus import IntegerType, parameter_map
 
 if TYPE_CHECKING:

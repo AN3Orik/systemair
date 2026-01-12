@@ -98,7 +98,7 @@ class SystemairClientBase(ABC):
         """Write a 32-bit value across two registers."""
 
     @abstractmethod
-    async def get_all_data(self, enable_alarm_history: bool = False) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Get all data from device."""
 
 
@@ -272,7 +272,7 @@ class SystemairModbusClient(SystemairClientBase):
         values = [low_word, high_word]
         await self._queue_request("write_multiple", address=address_1based - 1, values=values)
 
-    async def get_all_data(self, enable_alarm_history: bool = False) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
         read_blocks = list(READ_BLOCKS_BASE)
         if enable_alarm_history:
@@ -507,7 +507,7 @@ class SystemairSerialClient(SystemairClientBase):
             LOGGER.error("Serial port error during connection test: %s", e)
             return False
 
-    async def get_all_data(self, enable_alarm_history: bool = False) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
         read_blocks = list(READ_BLOCKS_BASE)
         if enable_alarm_history:
@@ -621,7 +621,7 @@ class SystemairWebApiClient(SystemairClientBase):
             url = f"http://{self._address}/mwrite?{{{query_params}}}"
             await self._api_wrapper(method="get", url=url)
 
-    async def get_all_data(self, enable_alarm_history: bool = False) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Get all data from device (compatibility with Modbus TCP client)."""
         async with self._lock:
             read_blocks = list(READ_BLOCKS_BASE)
