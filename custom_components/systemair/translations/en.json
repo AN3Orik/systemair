@@ -66,6 +66,10 @@
     },
     "entity": {
         "binary_sensor": {
+            "week_schedule_active": {
+                "name": "Week Schedule Active"
+            },
+
             "heat_exchange_active": {
                 "name": "Heat Exchange active"
             },

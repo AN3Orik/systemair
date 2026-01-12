@@ -66,6 +66,10 @@
     },
     "entity": {
         "binary_sensor": {
+            "week_schedule_active": {
+                "name": "Активно недельное расписание"
+            },
+
             "heat_exchange_active": {
                 "name": "Теплообмен активен"
             },

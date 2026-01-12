@@ -144,6 +144,13 @@ ENTITY_DESCRIPTIONS = (
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_SENSOR_DI_CHANGE_OVER_FEEDBACK"],
     ),
+    SystemairBinarySensorEntityDescription(
+        key="week_schedule_active",
+        translation_key="week_schedule_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_OUTPUT_WS_RUNNING_SCHEDULED"],
+    ),
+    
 )
 
 
