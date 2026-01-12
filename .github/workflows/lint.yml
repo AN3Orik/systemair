@@ -1,12 +1,15 @@
-name: "Lint"
+name: "Lint & Fix"
 
 on:
   push:
     branches:
-      - "main"
+      - "**"
   pull_request:
     branches:
       - "main"
+
+permissions:
+  contents: write
 
 jobs:
   ruff:
@@ -15,6 +18,8 @@ jobs:
     steps:
         - name: "Checkout the repository"
           uses: "actions/checkout@v6"
+          with:
+            ref: ${{ github.head_ref }}
 
         - name: "Set up Python"
           uses: actions/setup-python@v6
@@ -25,8 +30,24 @@ jobs:
         - name: "Install requirements"
           run: python3 -m pip install -r requirements.txt
 
-        - name: "Lint"
-          run: python3 -m ruff check .
+        # On Push: Fix and Format
+        - name: "Ruff Check & Fix"
+          if: github.event_name == 'push'
+          run: |
+            python3 -m ruff check . --fix
+            python3 -m ruff format .
 
-        - name: "Format"
-          run: python3 -m ruff format . --check
+        # On PR: Check only (fail if errors found)
+        - name: "Ruff Check (Read-only)"
+          if: github.event_name == 'pull_request'
+          run: |
+            python3 -m ruff check .
+            python3 -m ruff format . --check
+
+        # Commit changes only on Push
+        - name: "Commit changes"
+          if: github.event_name == 'push'
+          uses: stefanzweifel/git-auto-commit-action@v7
+          with:
+            commit_message: "style: auto-fix linting issues with Ruff"
+            branch: ${{ github.head_ref }}
