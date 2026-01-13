@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Main entry point for the systemair_api package."""
 
 import logging
