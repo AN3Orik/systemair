@@ -1,0 +1,16 @@
+window._env_ = {
+  SKIP_PREFLIGHT_CHECK: "true",
+  NODE_PATH: "./",
+  GATEWAY_QUERY_ENDPOINT: "https://homesolutions.systemair.com/gateway/api",
+  GATEWAY_SUBSCRIPTION_ENDPOINT: "wss://homesolutions.systemair.com/gateway/subscriptions",
+  GATEWAY_STREAMING_ENDPOINT: "wss://homesolutions.systemair.com/streaming",
+  TRANSLATION_ENDPOINT: "http://localhost:5000/translations",
+  WDS_SOCKET_PORT: "9000",
+  REMOTE_API_ENDPOINT: "https://homesolutions.systemair.com/gateway/remote-api",
+  SERVER_UNDER_MAINTENANCE: "false",
+  SENTRY_DSN: "https://d0b6fc27d46a1902144c79829191a05e@o4507247973105664.ingest.de.sentry.io/4507247975071824",
+  SENTRY_ENVIRONMENT: "production",
+  SENTRY_TRACES_SAMPLE_RATE: "0.2",
+  SENTRY_REPLAYS_SESSION_SAMPLE_RATE: "0.05",
+  SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE: "1.0",
+}
