@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_IP_ADDRESS, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_IP_ADDRESS, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -18,12 +20,14 @@ from .api import (
     SystemairWebApiClient,
 )
 from .const import (
+    API_TYPE_HOMESOLUTION,
     API_TYPE_MODBUS_SERIAL,
     API_TYPE_MODBUS_TCP,
     API_TYPE_MODBUS_WEBAPI,
     CONF_API_TYPE,
     CONF_BAUDRATE,
     CONF_BYTESIZE,
+    CONF_DEVICE_ID,
     CONF_ENABLE_ALARM_HISTORY,
     CONF_MODEL,
     CONF_PARITY,
@@ -60,6 +64,8 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._api_type: str | None = None
+        self._homesolution_creds: dict[str, Any] = {}
+        self._homesolution_devices: list[dict[str, Any]] = []
 
     @staticmethod
     @callback
@@ -126,6 +132,54 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         response["model"] = unit_version["MB Model"]
         return response
 
+    async def _get_homesolution_devices(self, user_input: dict) -> list[dict[str, Any]]:
+        """Validate HomeSolution credentials and get list of devices."""
+        # We need to import here to avoid circular imports or if the library is optional
+        from .systemair_api import (  # noqa: PLC0415
+            SystemairAPI,
+            SystemairAuthenticator,
+        )
+        from .systemair_api.utils.exceptions import (  # noqa: PLC0415
+            AuthenticationError,
+            SystemairError,
+        )
+
+        authenticator = SystemairAuthenticator(
+            email=user_input[CONF_USERNAME],
+            password=user_input[CONF_PASSWORD],
+        )
+
+        try:
+            await self.hass.async_add_executor_job(authenticator.authenticate)
+        except AuthenticationError as e:
+            msg = "invalid_auth"
+            raise ValueError(msg) from e
+        except SystemairError as e:
+            msg = "cannot_connect"
+            raise ValueError(msg) from e
+
+        api = SystemairAPI(access_token=authenticator.access_token)
+
+        try:
+            devices_response = await self.hass.async_add_executor_job(api.get_account_devices)
+        except SystemairError as e:
+            msg = "cannot_connect"
+            raise ValueError(msg) from e
+
+        # Logic adapted from HomeSolution coordinator
+        data = devices_response.get("data", {})
+        devices = []
+        if "GetAccountDevices" in data:
+            devices = data.get("GetAccountDevices", [])
+        elif "account" in data and "devices" in data.get("account", {}):
+            devices = data.get("account", {}).get("devices", [])
+
+        if not devices:
+            msg = "no_devices_found"
+            raise ValueError(msg)
+
+        return devices
+
     async def async_step_user(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Handle the initial step - select API type."""
         if user_input is not None:
@@ -135,6 +189,8 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_modbus_tcp()
             if self._api_type == API_TYPE_MODBUS_SERIAL:
                 return await self.async_step_modbus_serial()
+            if self._api_type == API_TYPE_HOMESOLUTION:
+                return await self.async_step_homesolution()
             return await self.async_step_modbus_webapi()
 
         return self.async_show_form(
@@ -147,6 +203,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 selector.SelectOptionDict(value=API_TYPE_MODBUS_TCP, label="Modbus TCP"),
                                 selector.SelectOptionDict(value=API_TYPE_MODBUS_WEBAPI, label="Modbus WebAPI (HTTP)"),
                                 selector.SelectOptionDict(value=API_TYPE_MODBUS_SERIAL, label="Modbus Serial (RS485)"),
+                                selector.SelectOptionDict(value=API_TYPE_HOMESOLUTION, label="HomeSolution (Cloud)"),
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
@@ -319,6 +376,82 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    async def async_step_homesolution(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        """Handle HomeSolution configuration."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                devices = await self._get_homesolution_devices(user_input)
+            except ValueError as e:
+                errors["base"] = str(e)
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                self._homesolution_creds = user_input
+                self._homesolution_devices = devices
+                return await self.async_step_homesolution_device()
+
+        return self.async_show_form(
+            step_id="homesolution",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.EMAIL,
+                        )
+                    ),
+                    vol.Required(CONF_PASSWORD): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.PASSWORD,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_homesolution_device(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
+        """Handle HomeSolution device selection."""
+        if user_input is not None:
+            device_id = user_input[CONF_DEVICE_ID]
+            selected_device = next((d for d in self._homesolution_devices if (d.get("identifier") or d.get("id")) == device_id), None)
+
+            if selected_device:
+                await self.async_set_unique_id(device_id)
+                self._abort_if_unique_id_configured()
+
+                data = {
+                    **self._homesolution_creds,
+                    CONF_API_TYPE: API_TYPE_HOMESOLUTION,
+                    CONF_DEVICE_ID: device_id,
+                }
+
+                return self.async_create_entry(
+                    title=selected_device.get("name", "Systemair Unit"),
+                    data=data,
+                )
+
+        options = []
+        for device in self._homesolution_devices:
+            d_id = device.get("identifier") or device.get("id")
+            d_name = device.get("name", d_id)
+            options.append(selector.SelectOptionDict(value=d_id, label=d_name))
+
+        return self.async_show_form(
+            step_id="homesolution_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_DEVICE_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
         )
 
 

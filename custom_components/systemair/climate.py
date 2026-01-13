@@ -1,7 +1,7 @@
 """Systemair HVAC integration."""
 
 import asyncio.exceptions
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -20,6 +20,9 @@ from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, UnitOfTempera
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+if TYPE_CHECKING:
+    from .coordinator import SystemairDataUpdateCoordinator
 
 from .const import (
     MAX_TEMP,
@@ -135,7 +138,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
         fan_speed = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
-        if fan_speed == 0:
+        if fan_speed is not None and fan_speed == 0:
             return HVACMode.OFF
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
@@ -228,6 +231,8 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     def preset_mode(self) -> str | None:
         """Return the current preset mode."""
         mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MODE"])
+        if mode is None:
+            return None
         return VALUE_TO_PRESET_MODE_MAP.get(int(mode), PRESET_MODE_MANUAL)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
@@ -242,12 +247,14 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
-        saf_output = int(self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"]))
-        if saf_output == 0:
+        saf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        if saf_output is not None and int(saf_output) == 0:
             return FAN_OFF
 
-        mode = int(self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]))
-        return VALUE_TO_FAN_MODE_MAP.get(mode, FAN_LOW)
+        mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
+        if mode is None:
+            return None
+        return VALUE_TO_FAN_MODE_MAP.get(int(mode), FAN_LOW)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode."""

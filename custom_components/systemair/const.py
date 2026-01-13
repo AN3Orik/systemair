@@ -14,6 +14,8 @@ CONF_API_TYPE = "api_type"
 CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_ENABLE_ALARM_HISTORY = "enable_alarm_history"
+CONF_DEVICE_ID = "device_id"
+CONF_DEVICE_NAME = "device_name"
 DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
 DEFAULT_WEB_API_MAX_REGISTERS = 70
@@ -24,6 +26,7 @@ DEFAULT_ENABLE_ALARM_HISTORY = False
 API_TYPE_MODBUS_TCP = "modbus_tcp"
 API_TYPE_MODBUS_WEBAPI = "modbus_webapi"
 API_TYPE_MODBUS_SERIAL = "modbus_serial"
+API_TYPE_HOMESOLUTION = "homesolution"
 
 # --- Serial Port Configuration ---
 CONF_SERIAL_PORT = "port"

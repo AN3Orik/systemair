@@ -184,6 +184,9 @@ class SystemairBinarySensor(SystemairEntity, BinarySensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         """Return true if the binary_sensor is on."""
-        return self.coordinator.get_modbus_data(self.entity_description.registry) != 0
+        val = self.coordinator.get_modbus_data(self.entity_description.registry)
+        if val is None:
+            return None
+        return val != 0

@@ -437,37 +437,46 @@ class SystemairSensor(SystemairEntity, SensorEntity):
 
         key = self.entity_description.key
         if key == "alarm_history":
-            if not self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY):
-                return None
-
-            first_log = alarm_log_registers[0]
-            alarm_id_reg = first_log["id"]
-            alarm_id = self.coordinator.data.get(str(alarm_id_reg - 1))
-            if alarm_id is None or alarm_id == 0:
-                return "No recent alarms"
-            return ALARM_ID_TO_NAME_MAP.get(int(alarm_id), f"Unknown ID: {alarm_id}")
+            return self._get_alarm_history_state()
 
         value = self.coordinator.get_modbus_data(self.entity_description.registry)
         if value is None:
             return None
 
         int_value = int(value)
-        result = None
 
         if value_map := self._KEY_TO_MAP.get(key):
-            result = value_map.get(int_value)
-        elif self.device_class == SensorDeviceClass.ENUM:
-            result = VALUE_MAP_TO_ALARM_STATE.get(int_value, "Inactive")
-        else:
-            result = str(value)
+            return value_map.get(int_value)
+        if self.device_class == SensorDeviceClass.ENUM:
+            return VALUE_MAP_TO_ALARM_STATE.get(int_value, "Inactive")
 
-        return result
+        return str(value)
+
+    def _get_alarm_history_state(self) -> str | None:
+        """Get the state for the alarm history sensor."""
+        if not self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY):
+            return None
+
+        # Alarm history not supported for HomeSolution yet
+        if self._is_homesolution:
+            return None
+
+        first_log = alarm_log_registers[0]
+        alarm_id_reg = first_log["id"]
+        alarm_id = self.coordinator.data.get(str(alarm_id_reg - 1))
+        if alarm_id is None or alarm_id == 0:
+            return "No recent alarms"
+        return ALARM_ID_TO_NAME_MAP.get(int(alarm_id), f"Unknown ID: {alarm_id}")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes."""
         if self.entity_description.key != "alarm_history":
             return None
+
+        # Alarm history not supported for HomeSolution yet
+        if self._is_homesolution:
+            return {"history": []}
 
         if self.coordinator.data is None:
             return {"history": []}
@@ -545,8 +554,12 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         extract_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
         heater_on = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_TRIAC"])
 
-        if supply_fan_pct is None or extract_fan_pct is None or heater_on is None:
-            return None
+        if supply_fan_pct is None:
+            supply_fan_pct = 0
+        if extract_fan_pct is None:
+            extract_fan_pct = 0
+        if heater_on is None:
+            heater_on = 0
 
         # Calculate power for each component
         supply_power = (float(supply_fan_pct) / 100) * power_per_fan * num_supply_fans

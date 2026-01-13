@@ -14,7 +14,14 @@ from .api import (
     SystemairClientBase,
     SystemairWebApiClient,
 )
-from .const import CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY, DOMAIN, LOGGER
+from .const import (
+    CONF_ENABLE_ALARM_HISTORY,
+    DEFAULT_ENABLE_ALARM_HISTORY,
+    DOMAIN,
+    LOGGER,
+)
+from .homesolution import SystemairHomeSolutionClient
+from .homesolution_mapping import HOMESOLUTION_MAPPING
 from .modbus import IntegerType, parameter_map
 
 if TYPE_CHECKING:
@@ -48,6 +55,10 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.config_entry = config_entry
         self._is_webapi = isinstance(client, SystemairWebApiClient)
+        self._is_homesolution = isinstance(client, SystemairHomeSolutionClient)
+
+        if self._is_homesolution:
+            self.client.set_update_callback(self.async_set_updated_data_from_ws)
 
         self.modbus_parameters: list[ModbusParameter] = []
 
@@ -75,13 +86,31 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if combine_with and combine_with not in self.modbus_parameters:
                 self.modbus_parameters.append(combine_with)
 
-    def get_modbus_data(self, register: ModbusParameter) -> float | bool:
+    def get_modbus_data(self, register: ModbusParameter) -> float | bool:  # noqa: PLR0911, PLR0912
         """Get the data for a Modbus register."""
         if self._is_webapi:
             self.register_modbus_parameters(register)
 
         if self.data is None:
             return 0
+
+        if self._is_homesolution:
+            # HomeSolution Logic
+            # The data stored in self.data is the VentilationUnit object if homesolution
+            if isinstance(self.data, dict):
+                # Fallback if for some reason it is a dict (should not happen with new logic)
+                pass
+            else:
+                # It's a VentilationUnit object
+                mapper = HOMESOLUTION_MAPPING.get(register.short)
+                if mapper:
+                    val = mapper(self.data)
+                    if val is None:
+                        return None
+                    if register.boolean:
+                        return bool(val)
+                    return float(val)
+                return None
 
         value = self.data.get(str(register.register - 1))
 
@@ -130,6 +159,11 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             msg = f"Failed to write to 32-bit register starting at {register.register}: {exc}"
             raise UpdateFailed(msg) from exc
 
+    def async_set_updated_data_from_ws(self) -> None:
+        """Update data from WebSocket callback."""
+        if self.client.unit:
+            self.async_set_updated_data(self.client.unit)
+
     async def async_setup_webapi(self) -> None:
         """Set up coordinator for WebAPI (get device info)."""
         if not self._is_webapi:
@@ -163,6 +197,9 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if self.modbus_parameters:
                     return await self.client.async_get_data(self.modbus_parameters)
                 return await self.client.get_all_data(enable_alarm_history=enable_alarm_history)
-            return await self.client.get_all_data(enable_alarm_history=enable_alarm_history)
+
+            # For HomeSolution, get_all_data returns the VentilationUnit object
+            # For others, it returns a dict of registers
+            return await self.client.get_all_data(_enable_alarm_history=enable_alarm_history)
         except (ModbusConnectionError, SystemairApiClientError) as exception:
             raise UpdateFailed(exception) from exception

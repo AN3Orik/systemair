@@ -38,12 +38,24 @@
                     "ip_address": "IP-адрес",
                     "model": "Модель устройства (необязательно)"
                 }
+            },
+            "homesolution": {
+                "title": "HomeSolution (Cloud)",
+                "description": "Введите ваши учетные данные HomeSolution (Cloud) (email и пароль).",
+                "data": {
+                    "username": "Email",
+                    "password": "Пароль"
+                }
             }
         },
         "error": {
             "cannot_connect": "Не удалось подключиться к устройству. Проверьте параметры подключения и убедитесь, что устройство в сети.",
-            "unknown": "Произошла неизвестная ошибка.",
-            "already_configured": "Это устройство уже настроено."
+            "invalid_auth": "Неверные учетные данные.",
+            "no_devices_found": "На этом аккаунте не найдено вентиляционных установок.",
+            "unknown": "Произошла неизвестная ошибка."
+        },
+        "abort": {
+            "already_configured": "Устройство уже настроено"
         }
     },
     "options": {
