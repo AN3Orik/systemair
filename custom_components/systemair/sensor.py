@@ -182,6 +182,20 @@ POWER_SENSORS: tuple[SystemairPowerSensorEntityDescription, ...] = (
 
 ENTITY_DESCRIPTIONS = (
     SystemairSensorEntityDescription(
+        key="analog_input_ui_1",
+        translation_key="analog_input_ui_1",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mV",
+        registry=parameter_map["REG_INPUT_ANALOG_UI_1"],
+    ),
+    SystemairSensorEntityDescription(
+        key="analog_input_ui_2",
+        translation_key="analog_input_ui_2",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mV",
+        registry=parameter_map["REG_INPUT_ANALOG_UI_2"],
+    ),
+    SystemairSensorEntityDescription(
         key="outside_air_temperature",
         translation_key="outside_air_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
