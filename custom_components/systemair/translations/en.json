@@ -38,12 +38,24 @@
                     "ip_address": "IP Address",
                     "model": "Ventilation Unit Model (optional)"
                 }
+            },
+            "homesolution": {
+                "title": "HomeSolution (Cloud)",
+                "description": "Enter your HomeSolution (Cloud) credentials (email and password).",
+                "data": {
+                    "username": "Email",
+                    "password": "Password"
+                }
             }
         },
         "error": {
             "cannot_connect": "Unable to connect to the device. Please check the connection details and ensure the device is online.",
-            "unknown": "An unknown error occurred.",
-            "already_configured": "This device is already configured."
+            "invalid_auth": "Invalid authentication credentials.",
+            "no_devices_found": "No ventilation units found on this account.",
+            "unknown": "An unknown error occurred."
+        },
+        "abort": {
+            "already_configured": "Device is already configured"
         }
     },
     "options": {
@@ -52,16 +64,24 @@
                 "title": "Systemair Settings",
                 "data": {
                     "model": "Ventilation Unit Model",
-                    "web_api_max_registers": "Max registers per Web API request"
+                    "update_interval": "Update Interval",
+                    "web_api_max_registers": "Max registers per Web API request",
+                    "enable_alarm_history": "Enable Alarm History"
                 },
                 "data_description": {
-                    "web_api_max_registers": "Maximum number of registers to read in a single Web API request. Range: 30-125."
+                    "update_interval": "How often to poll the device for updates. Range: 10-120 seconds.",
+                    "web_api_max_registers": "Maximum number of registers to read in a single Web API request. Range: 30-125.",
+                    "enable_alarm_history": "Enable fetching alarm history (increases Modbus load)"
                 }
             }
         }
     },
     "entity": {
         "binary_sensor": {
+            "week_schedule_active": {
+                "name": "Week Schedule Active"
+            },
+
             "heat_exchange_active": {
                 "name": "Heat Exchange active"
             },

@@ -132,6 +132,8 @@ class SystemairSelect(SystemairEntity, SelectEntity):
     def current_option(self) -> str | None:
         """Return the selected entity option to represent the entity state."""
         value = self.coordinator.get_modbus_data(self.entity_description.registry)
+        if value is None:
+            return None
         return self.entity_description.options_map.get(int(value))
 
     async def async_select_option(self, option: str) -> None:

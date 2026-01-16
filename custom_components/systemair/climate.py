@@ -1,7 +1,7 @@
 """Systemair HVAC integration."""
 
 import asyncio.exceptions
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -13,12 +13,16 @@ from homeassistant.components.climate.const import (
     FAN_HIGH,
     FAN_LOW,
     FAN_MEDIUM,
+    FAN_OFF,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+if TYPE_CHECKING:
+    from .coordinator import SystemairDataUpdateCoordinator
 
 from .const import (
     MAX_TEMP,
@@ -60,6 +64,7 @@ PRESET_MODE_TO_VALUE_MAP = {
 VALUE_TO_PRESET_MODE_MAP = {value - 1: key for key, value in PRESET_MODE_TO_VALUE_MAP.items()}
 
 FAN_MODE_TO_VALUE_MAP = {
+    FAN_OFF: 0,
     FAN_LOW: 2,
     FAN_MEDIUM: 3,
     FAN_HIGH: 4,
@@ -94,6 +99,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     ]
 
     _attr_fan_modes: ClassVar[list[str]] = [
+        FAN_OFF,
         FAN_LOW,
         FAN_MEDIUM,
         FAN_HIGH,
@@ -132,7 +138,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
         fan_speed = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
-        if fan_speed == 0:
+        if fan_speed is not None and fan_speed == 0:
             return HVACMode.OFF
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
@@ -180,11 +186,17 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_TRIAC"])
         cooler = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_Y3_DIGITAL"])
+        saf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        eaf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
 
         if heater:
             return HVACAction.HEATING
         if cooler:
             return HVACAction.COOLING
+
+        # If both fans are stopped, the unit is idle (e.g. stopped by schedule)
+        if saf_output == 0 and eaf_output == 0:
+            return HVACAction.IDLE
 
         return HVACAction.FAN
 
@@ -219,6 +231,8 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     def preset_mode(self) -> str | None:
         """Return the current preset mode."""
         mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MODE"])
+        if mode is None:
+            return None
         return VALUE_TO_PRESET_MODE_MAP.get(int(mode), PRESET_MODE_MANUAL)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
@@ -233,7 +247,13 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the current fan mode."""
+        saf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        if saf_output is not None and int(saf_output) == 0:
+            return FAN_OFF
+
         mode = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
+        if mode is None:
+            return None
         return VALUE_TO_FAN_MODE_MAP.get(int(mode), FAN_LOW)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:

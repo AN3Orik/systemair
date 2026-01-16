@@ -270,7 +270,7 @@ class SystemairNumber(SystemairEntity, NumberEntity):
         self.native_max_value = float(entity_description.registry.max_value or 100) / scale_factor
 
     @property
-    def native_value(self) -> float:
+    def native_value(self) -> float | None:
         """Return the state of the number."""
         return self.coordinator.get_modbus_data(self.entity_description.registry)
 

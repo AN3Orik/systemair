@@ -4,28 +4,40 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_HOST, CONF_IP_ADDRESS, CONF_PORT, Platform
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_IP_ADDRESS,
+    CONF_PASSWORD,
+    CONF_PORT,
+    CONF_USERNAME,
+    Platform,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
 from .api import SystemairModbusClient, SystemairSerialClient, SystemairWebApiClient
 from .const import (
+    API_TYPE_HOMESOLUTION,
     API_TYPE_MODBUS_SERIAL,
     API_TYPE_MODBUS_TCP,
     API_TYPE_MODBUS_WEBAPI,
     CONF_API_TYPE,
     CONF_BAUDRATE,
     CONF_BYTESIZE,
+    CONF_DEVICE_ID,
     CONF_MODEL,
     CONF_PARITY,
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
+    CONF_UPDATE_INTERVAL,
     CONF_WEB_API_MAX_REGISTERS,
+    DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
 )
 from .coordinator import SystemairDataUpdateCoordinator
 from .data import SystemairConfigEntry, SystemairData
+from .homesolution import SystemairHomeSolutionClient
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -64,6 +76,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
             slave_id=entry.data[CONF_SLAVE_ID],
         )
         await client.start()
+    elif api_type == API_TYPE_HOMESOLUTION:
+        client = SystemairHomeSolutionClient(
+            username=entry.data[CONF_USERNAME],
+            password=entry.data[CONF_PASSWORD],
+            device_id=entry.data[CONF_DEVICE_ID],
+        )
+        await client.start()
     else:
         # Default to Modbus TCP
         client = SystemairModbusClient(
@@ -73,7 +92,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         )
         await client.start()
 
-    coordinator = SystemairDataUpdateCoordinator(hass=hass, client=client, config_entry=entry)
+    update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    coordinator = SystemairDataUpdateCoordinator(
+        hass=hass,
+        client=client,
+        config_entry=entry,
+        update_interval_seconds=update_interval,
+    )
 
     model = entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "VSR 300"))
 
@@ -110,7 +135,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)
-        if api_type in (API_TYPE_MODBUS_TCP, API_TYPE_MODBUS_SERIAL):
+        if api_type in (API_TYPE_MODBUS_TCP, API_TYPE_MODBUS_SERIAL, API_TYPE_HOMESOLUTION):
             client = entry.runtime_data.client
             await client.stop()
 

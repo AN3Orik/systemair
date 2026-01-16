@@ -116,6 +116,19 @@ Configure connection to SAVECONNECT 2.0 IAM module:
 
 You can change the model at any time after installation by navigating to the integration's page and clicking **Configure**.
 
+## Integration Options
+
+After installation, configure these options via **Settings > Devices & Services > Systemair > Configure**:
+
+| Option | Range | Default | Description |
+|--------|-------|---------|-------------|
+| Ventilation Unit Model | — | VSR 300 | Select your unit model for accurate power calculations |
+| Update Interval | 10-120s | 60s | How often to poll the device for updates |
+| Max Registers per Web API Request | 30-125 | 70 | Registers per request (Web API only) |
+| Enable Alarm History | True/False | False | Enable fetching alarm history (increases Modbus load) |
+
+> **⚠️ Note:** Some units (e.g., VTR 300) may experience Modbus communication hangs with low update intervals. If you experience connectivity issues, increase the update interval. Lowering below default is at your own risk.
+
 ## Entities Provided
 
 This integration creates a single device for your ventilation unit with the following entities:
@@ -168,3 +181,5 @@ To get the best experience, it is recommended to also install the [Systemair Lov
 1.  Open HACS and go to "Custom integrations". Enter the URL `https://github.com/AN3Orik/systemair-lovelace`, choose type Dashboard and click Add.
 2.  Find the "Systemair Lovelace Cards" in the list and click **Download**.
 3.  Follow the instructions to add the card to your dashboard.
+
+> **⚠️ Important:** To use the **Alarm History** feature in these cards, you must enable the `Enable Alarm History` option in the integration configuration. Be aware that enabling this option will significantly increase the data read from Modbus (adds ~250 registers per poll) and may cause slowdowns or timeouts on some units.

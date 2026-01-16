@@ -29,38 +29,42 @@ MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
 WEB_API_MAX_REGISTERS_PER_REQUEST = 70
 
-READ_BLOCKS = [
+READ_BLOCKS_BASE = [
     (1001, 62),
-    (1101, 80),
-    (1271, 4),
-    (1353, 1),
+    (1101, 88),
+    (1201, 74),
+    (1351, 3),
     (2001, 125),
     (2126, 24),
-    (2317, 2),
-    (2419, 1),
-    (2453, 1),
-    (2505, 1),
+    (2201, 63),
+    (2311, 8),
+    (2401, 53),
+    (2504, 18),
     (3002, 116),
     (4001, 12),
-    (4100, 1),
-    (7005, 2),
-    (12102, 40),
-    (12306, 12),
-    (12401, 2),
+    (4101, 20),
+    (7001, 6),
+    (12101, 41),
+    (12301, 17),
+    (12401, 5),
     (12544, 1),
     (14001, 4),
     (14101, 5),
-    (14201, 2),
-    (14301, 6),
+    (14201, 4),
+    (14301, 11),
     (14381, 1),
     (15016, 125),
     (15141, 125),
     (15266, 125),
     (15391, 125),
     (15516, 125),
+    (15901, 10),
+]
+
+READ_BLOCKS_ALARM_HISTORY = [
     (15641, 125),
     (15766, 125),
-    (15891, 13),
+    (15891, 10),
 ]
 
 
@@ -94,7 +98,7 @@ class SystemairClientBase(ABC):
         """Write a 32-bit value across two registers."""
 
     @abstractmethod
-    async def get_all_data(self) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Get all data from device."""
 
 
@@ -268,16 +272,20 @@ class SystemairModbusClient(SystemairClientBase):
         values = [low_word, high_word]
         await self._queue_request("write_multiple", address=address_1based - 1, values=values)
 
-    async def get_all_data(self) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
-        tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in READ_BLOCKS]
+        read_blocks = list(READ_BLOCKS_BASE)
+        if enable_alarm_history:
+            read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+
+        tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in read_blocks]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_registers = {}
         has_successful_read = False
         for i, result in enumerate(results):
-            start_addr_1based, _ = READ_BLOCKS[i]
+            start_addr_1based, _ = read_blocks[i]
             if isinstance(result, Exception):
                 LOGGER.error(f"Failed to read block {start_addr_1based}: {result}")
                 continue
@@ -499,16 +507,20 @@ class SystemairSerialClient(SystemairClientBase):
             LOGGER.error("Serial port error during connection test: %s", e)
             return False
 
-    async def get_all_data(self) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
-        tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in READ_BLOCKS]
+        read_blocks = list(READ_BLOCKS_BASE)
+        if enable_alarm_history:
+            read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+
+        tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in read_blocks]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_registers = {}
         has_successful_read = False
         for i, result in enumerate(results):
-            start_addr_1based, _ = READ_BLOCKS[i]
+            start_addr_1based, _ = read_blocks[i]
             if isinstance(result, Exception):
                 LOGGER.error(f"Failed to read block {start_addr_1based}: {result}")
                 continue
@@ -609,11 +621,15 @@ class SystemairWebApiClient(SystemairClientBase):
             url = f"http://{self._address}/mwrite?{{{query_params}}}"
             await self._api_wrapper(method="get", url=url)
 
-    async def get_all_data(self) -> dict[str, Any]:
+    async def get_all_data(self, *, enable_alarm_history: bool = False) -> dict[str, Any]:
         """Get all data from device (compatibility with Modbus TCP client)."""
         async with self._lock:
+            read_blocks = list(READ_BLOCKS_BASE)
+            if enable_alarm_history:
+                read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+
             tasks = []
-            for start, count in READ_BLOCKS:
+            for start, count in read_blocks:
                 tasks.append(self._read_block(start, count))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -622,7 +638,7 @@ class SystemairWebApiClient(SystemairClientBase):
             has_successful_read = False
 
             for i, result in enumerate(results):
-                start_addr_1based, _ = READ_BLOCKS[i]
+                start_addr_1based, _ = read_blocks[i]
                 if isinstance(result, Exception):
                     LOGGER.error(f"Failed to read block {start_addr_1based}: {result}")
                     continue

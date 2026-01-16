@@ -38,12 +38,24 @@
                     "ip_address": "IP-адрес",
                     "model": "Модель устройства (необязательно)"
                 }
+            },
+            "homesolution": {
+                "title": "HomeSolution (Cloud)",
+                "description": "Введите ваши учетные данные HomeSolution (Cloud) (email и пароль).",
+                "data": {
+                    "username": "Email",
+                    "password": "Пароль"
+                }
             }
         },
         "error": {
             "cannot_connect": "Не удалось подключиться к устройству. Проверьте параметры подключения и убедитесь, что устройство в сети.",
-            "unknown": "Произошла неизвестная ошибка.",
-            "already_configured": "Это устройство уже настроено."
+            "invalid_auth": "Неверные учетные данные.",
+            "no_devices_found": "На этом аккаунте не найдено вентиляционных установок.",
+            "unknown": "Произошла неизвестная ошибка."
+        },
+        "abort": {
+            "already_configured": "Устройство уже настроено"
         }
     },
     "options": {
@@ -52,16 +64,24 @@
                 "title": "Настройки Systemair",
                 "data": {
                     "model": "Модель устройства",
-                    "web_api_max_registers": "Макс. регистров на запрос Web API"
+                    "update_interval": "Интервал обновления",
+                    "web_api_max_registers": "Макс. регистров на запрос Web API",
+                    "enable_alarm_history": "Включить историю аварий"
                 },
                 "data_description": {
-                    "web_api_max_registers": "Максимальное количество регистров, читаемых за один запрос Web API. Диапазон: 30-125."
+                    "update_interval": "Как часто опрашивать устройство для получения обновлений. Диапазон: 10-120 секунд.",
+                    "web_api_max_registers": "Максимальное количество регистров, читаемых за один запрос Web API. Диапазон: 30-125.",
+                    "enable_alarm_history": "Включить получение истории аварий (увеличивает нагрузку на Modbus)"
                 }
             }
         }
     },
     "entity": {
         "binary_sensor": {
+            "week_schedule_active": {
+                "name": "Активно недельное расписание"
+            },
+
             "heat_exchange_active": {
                 "name": "Теплообмен активен"
             },

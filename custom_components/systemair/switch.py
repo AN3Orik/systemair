@@ -83,9 +83,12 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         """Return true if the switch is on."""
-        return self.coordinator.get_modbus_data(self.entity_description.registry) != 0
+        val = self.coordinator.get_modbus_data(self.entity_description.registry)
+        if val is None:
+            return None
+        return val != 0
 
     async def _async_set_state(self, *, value: bool) -> None:
         """Turn on or off the switch."""
