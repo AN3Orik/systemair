@@ -229,6 +229,12 @@
             }
         },
         "sensor": {
+            "analog_input_ui_1": {
+                "name": "Analog Input UI 1"
+            },
+            "analog_input_ui_2": {
+                "name": "Analog Input UI 2"
+            },
             "outside_air_temperature": {
                 "name": "Outside air temperature"
             },

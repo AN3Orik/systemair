@@ -1779,6 +1779,20 @@ parameters_list = [
         scale_factor=10,
     ),
     ModbusParameter(
+        register=12011,
+        sig=IntegerType.INT,
+        reg_type=RegisterType.Holding,
+        short="REG_INPUT_ANALOG_UI_1",
+        description="Analog Input UI 1",
+    ),
+    ModbusParameter(
+        register=12012,
+        sig=IntegerType.INT,
+        reg_type=RegisterType.Holding,
+        short="REG_INPUT_ANALOG_UI_2",
+        description="Analog Input UI 2",
+    ),
+    ModbusParameter(
         register=12102,
         sig=IntegerType.INT,
         reg_type=RegisterType.Input,
