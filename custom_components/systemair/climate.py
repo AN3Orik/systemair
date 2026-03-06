@@ -137,8 +137,15 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
+        # Check manual fan speed setting first
         fan_speed = self.coordinator.get_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"])
         if fan_speed is not None and fan_speed == 0:
+            return HVACMode.OFF
+
+        # Check actual fan output - fans may be stopped by weekly schedule even if manual setting is non-zero
+        saf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
+        eaf_output = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
+        if saf_output == 0 and eaf_output == 0:
             return HVACMode.OFF
 
         heater = self.coordinator.get_modbus_data(parameter_map["REG_FUNCTION_ACTIVE_HEATER"])
