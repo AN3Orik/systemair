@@ -3,7 +3,7 @@ name: "Lint & Fix"
 on:
   push:
     branches:
-      - "**"
+      - "main"
   pull_request:
     branches:
       - "main"
@@ -50,4 +50,3 @@ jobs:
           uses: stefanzweifel/git-auto-commit-action@v7
           with:
             commit_message: "style: auto-fix linting issues with Ruff"
-            branch: ${{ github.head_ref }}
