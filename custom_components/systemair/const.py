@@ -13,6 +13,7 @@ CONF_SLAVE_ID = "slave_id"
 CONF_API_TYPE = "api_type"
 CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
 CONF_UPDATE_INTERVAL = "update_interval"
+CONF_ENABLE_ALARM_DETAILS = "enable_alarm_details"
 CONF_ENABLE_ALARM_HISTORY = "enable_alarm_history"
 CONF_DEVICE_ID = "device_id"
 CONF_DEVICE_NAME = "device_name"
@@ -20,6 +21,7 @@ DEFAULT_PORT = 502
 DEFAULT_SLAVE_ID = 1
 DEFAULT_WEB_API_MAX_REGISTERS = 70
 DEFAULT_UPDATE_INTERVAL = 60
+DEFAULT_ENABLE_ALARM_DETAILS = True
 DEFAULT_ENABLE_ALARM_HISTORY = False
 
 # --- API Types ---

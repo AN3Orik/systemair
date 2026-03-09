@@ -15,7 +15,9 @@ from .api import (
     SystemairWebApiClient,
 )
 from .const import (
+    CONF_ENABLE_ALARM_DETAILS,
     CONF_ENABLE_ALARM_HISTORY,
+    DEFAULT_ENABLE_ALARM_DETAILS,
     DEFAULT_ENABLE_ALARM_HISTORY,
     DOMAIN,
     LOGGER,
@@ -192,14 +194,21 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
+            enable_alarm_details = self.config_entry.options.get(CONF_ENABLE_ALARM_DETAILS, DEFAULT_ENABLE_ALARM_DETAILS)
             enable_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
             if self._is_webapi:
                 if self.modbus_parameters:
                     return await self.client.async_get_data(self.modbus_parameters)
-                return await self.client.get_all_data(enable_alarm_history=enable_alarm_history)
+                return await self.client.get_all_data(
+                    enable_alarm_details=enable_alarm_details,
+                    enable_alarm_history=enable_alarm_history,
+                )
 
             # For HomeSolution, get_all_data returns the VentilationUnit object
             # For others, it returns a dict of registers
-            return await self.client.get_all_data(_enable_alarm_history=enable_alarm_history)
+            return await self.client.get_all_data(
+                enable_alarm_details=enable_alarm_details,
+                enable_alarm_history=enable_alarm_history,
+            )
         except (ModbusConnectionError, SystemairApiClientError) as exception:
             raise UpdateFailed(exception) from exception

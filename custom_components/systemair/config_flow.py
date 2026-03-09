@@ -28,6 +28,7 @@ from .const import (
     CONF_BAUDRATE,
     CONF_BYTESIZE,
     CONF_DEVICE_ID,
+    CONF_ENABLE_ALARM_DETAILS,
     CONF_ENABLE_ALARM_HISTORY,
     CONF_MODEL,
     CONF_PARITY,
@@ -38,7 +39,6 @@ from .const import (
     CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
-    DEFAULT_ENABLE_ALARM_HISTORY,
     DEFAULT_PARITY,
     DEFAULT_PORT,
     DEFAULT_SERIAL_PORT,
@@ -478,9 +478,12 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
         api_type = self.config_entry.data.get(CONF_API_TYPE)
 
-        # Get current update interval & alarm history
+        # Get current update interval & alarm options
+        # WebAPI (SAVECONNECT 2.0) has these disabled by default to prevent hangs
+        is_webapi = api_type == API_TYPE_MODBUS_WEBAPI
         default_update_interval = self.config_entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-        default_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
+        default_alarm_details = self.config_entry.options.get(CONF_ENABLE_ALARM_DETAILS, not is_webapi)
+        default_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, not is_webapi)
 
         # Base schema with model selection and update interval
         schema_dict = {
@@ -512,6 +515,7 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
                 )
             )
 
+        schema_dict[vol.Optional(CONF_ENABLE_ALARM_DETAILS, default=default_alarm_details)] = selector.BooleanSelector()
         schema_dict[vol.Optional(CONF_ENABLE_ALARM_HISTORY, default=default_alarm_history)] = selector.BooleanSelector()
 
         return self.async_show_form(

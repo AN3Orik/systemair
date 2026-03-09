@@ -120,7 +120,12 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             except Exception as e:  # noqa: BLE001
                 _LOGGER.warning("Failed to disconnect WebSocket: %s", e)
 
-    async def get_all_data(self, _enable_alarm_history: bool = False) -> VentilationUnit:  # noqa: FBT001, FBT002
+    async def get_all_data(
+        self,
+        *,
+        _enable_alarm_details: bool = True,
+        _enable_alarm_history: bool = False,
+    ) -> VentilationUnit:
         """Get all data."""
         if not self.authenticator.is_token_valid():
             await asyncio.to_thread(self.authenticator.refresh_access_token)
