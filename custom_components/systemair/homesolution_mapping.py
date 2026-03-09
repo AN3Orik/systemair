@@ -105,36 +105,46 @@ def get_reg(unit: VentilationUnit, register_id: int, default: Any = None) -> Any
 # Mapping from Modbus register short names to lambda functions extracting data from VentilationUnit
 HOMESOLUTION_MAPPING = {
     # Temperature sensors
-    "REG_SENSOR_OAT": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_OAT, unit.temperatures.get("oat", 0) * 10)
-    / 10.0
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_OAT) is not None or unit.temperatures.get("oat") is not None
-    else None,
-    "REG_SENSOR_SAT": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_SAT, unit.temperatures.get("sat", 0) * 10)
-    / 10.0
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_SAT) is not None or unit.temperatures.get("sat") is not None
-    else None,
-    "REG_SENSOR_RAT": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RAT, unit.temperatures.get("room", 0) * 10)
-    / 10.0
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RAT) is not None or unit.temperatures.get("room") is not None
-    else None,
-    "REG_SENSOR_EAT": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_EAT, unit.temperatures.get("eat", 0) * 10)
-    / 10.0
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_EAT) is not None or unit.temperatures.get("eat") is not None
-    else None,
-    "REG_TC_SP": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_TC_SP, unit.temperatures.get("setpoint", 0) * 10) / 10.0
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_TC_SP) is not None or unit.temperatures.get("setpoint") is not None
-    else None,
+    "REG_SENSOR_OAT": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_OAT, unit.temperatures.get("oat", 0) * 10) / 10.0
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_OAT) is not None or unit.temperatures.get("oat") is not None
+        else None
+    ),
+    "REG_SENSOR_SAT": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_SAT, unit.temperatures.get("sat", 0) * 10) / 10.0
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_SAT) is not None or unit.temperatures.get("sat") is not None
+        else None
+    ),
+    "REG_SENSOR_RAT": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RAT, unit.temperatures.get("room", 0) * 10) / 10.0
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RAT) is not None or unit.temperatures.get("room") is not None
+        else None
+    ),
+    "REG_SENSOR_EAT": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_EAT, unit.temperatures.get("eat", 0) * 10) / 10.0
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_EAT) is not None or unit.temperatures.get("eat") is not None
+        else None
+    ),
+    "REG_TC_SP": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_TC_SP, unit.temperatures.get("setpoint", 0) * 10) / 10.0
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_TC_SP) is not None or unit.temperatures.get("setpoint") is not None
+        else None
+    ),
     # Humidity
     "REG_SENSOR_RHS_PDM": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RHS_PDM, unit.humidity),
     # Operation Mode & Fan
     "REG_USERMODE_MODE": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI, unit.user_mode),
     "REG_USERMODE_HMI_CHANGE_REQUEST": _get_preset_mode_value,
-    "REG_OUTPUT_SAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
-    else 0,
-    "REG_OUTPUT_EAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
-    if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
-    else 0,
+    "REG_OUTPUT_SAF": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
+        else 0
+    ),
+    "REG_OUTPUT_EAF": lambda unit: (
+        unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
+        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
+        else 0
+    ),
     "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": _get_fan_mode_value,
     "REG_FAN_MANUAL_STOP_ALLOWED": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FAN_MANUAL_STOP_ALLOWED),
     "REG_SENSOR_RPM_SAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RPM_SAF),
