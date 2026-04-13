@@ -9,7 +9,13 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    CONCENTRATION_PARTS_PER_MILLION,
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -229,6 +235,26 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
         mode=NumberMode.BOX,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         registry=parameter_map["REG_EXTRA_CONTROLLER_CIRC_PUMP_STOP_DELAY"],
+    ),
+    SystemairNumberEntityDescription(
+        key="modbus_co2_input",
+        translation_key="modbus_co2_input",
+        device_class=NumberDeviceClass.CO2,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=CONCENTRATION_PARTS_PER_MILLION,
+        icon="mdi:molecule-co2",
+        registry=parameter_map["REG_SENSOR_MODBUS_CO2"],
+    ),
+    SystemairNumberEntityDescription(
+        key="modbus_rh_input",
+        translation_key="modbus_rh_input",
+        device_class=NumberDeviceClass.HUMIDITY,
+        native_step=1,
+        mode=NumberMode.BOX,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:water-percent",
+        registry=parameter_map["REG_SENSOR_MODBUS_RHS"],
     ),
 )
 

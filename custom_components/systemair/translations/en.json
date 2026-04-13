@@ -228,6 +228,12 @@
             },
             "extra_controller_circ_pump_stop_delay": {
                 "name": "Extra Controller Circulation Pump: Stop Delay"
+            },
+            "modbus_co2_input": {
+                "name": "Modbus CO2 Input"
+            },
+            "modbus_rh_input": {
+                "name": "Modbus Humidity Input"
             }
         },
         "sensor": {
