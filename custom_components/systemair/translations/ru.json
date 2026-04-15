@@ -229,9 +229,21 @@
             },
             "extra_controller_circ_pump_stop_delay": {
                 "name": "Циркуляционный насос доп. контроллера: Задержка выключения"
+            },
+            "modbus_co2_input": {
+                "name": "Вход Modbus CO2"
+            },
+            "modbus_rh_input": {
+                "name": "Вход Modbus влажности"
             }
         },
         "sensor": {
+            "analog_input_ui_1": {
+                "name": "Аналоговый вход UI 1"
+            },
+            "analog_input_ui_2": {
+                "name": "Аналоговый вход UI 2"
+            },
             "outside_air_temperature": {
                 "name": "Температура наружного воздуха"
             },
