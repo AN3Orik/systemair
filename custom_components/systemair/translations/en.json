@@ -234,6 +234,36 @@
             },
             "modbus_rh_input": {
                 "name": "Modbus Humidity Input"
+            },
+            "fan_level_saf_min_rpm": {
+                "name": "Fan Level Minimum: Supply RPM"
+            },
+            "fan_level_eaf_min_rpm": {
+                "name": "Fan Level Minimum: Extract RPM"
+            },
+            "fan_level_saf_low_rpm": {
+                "name": "Fan Level Low: Supply RPM"
+            },
+            "fan_level_eaf_low_rpm": {
+                "name": "Fan Level Low: Extract RPM"
+            },
+            "fan_level_saf_normal_rpm": {
+                "name": "Fan Level Normal: Supply RPM"
+            },
+            "fan_level_eaf_normal_rpm": {
+                "name": "Fan Level Normal: Extract RPM"
+            },
+            "fan_level_saf_high_rpm": {
+                "name": "Fan Level High: Supply RPM"
+            },
+            "fan_level_eaf_high_rpm": {
+                "name": "Fan Level High: Extract RPM"
+            },
+            "fan_level_saf_max_rpm": {
+                "name": "Fan Level Maximum: Supply RPM"
+            },
+            "fan_level_eaf_max_rpm": {
+                "name": "Fan Level Maximum: Extract RPM"
             }
         },
         "sensor": {
