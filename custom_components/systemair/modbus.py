@@ -1004,7 +1004,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_SAF_MIN_RPM",
         description="Supply air fan RPM setpoint for the Minimum airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1411,
@@ -1013,7 +1013,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_EAF_MIN_RPM",
         description="Extract air fan RPM setpoint for the Minimum airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1412,
@@ -1022,7 +1022,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_SAF_LOW_RPM",
         description="Supply air fan RPM setpoint for the Low airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1413,
@@ -1031,7 +1031,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_EAF_LOW_RPM",
         description="Extract air fan RPM setpoint for the Low airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1414,
@@ -1040,7 +1040,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_SAF_NORMAL_RPM",
         description="Supply air fan RPM setpoint for the Normal airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1415,
@@ -1049,7 +1049,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_EAF_NORMAL_RPM",
         description="Extract air fan RPM setpoint for the Normal airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1416,
@@ -1058,7 +1058,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_SAF_HIGH_RPM",
         description="Supply air fan RPM setpoint for the High airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1417,
@@ -1067,7 +1067,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_EAF_HIGH_RPM",
         description="Extract air fan RPM setpoint for the High airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1418,
@@ -1076,7 +1076,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_SAF_MAX_RPM",
         description="Supply air fan RPM setpoint for the Maximum airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     ModbusParameter(
         register=1419,
@@ -1085,7 +1085,7 @@ parameters_list = [
         short="REG_FAN_LEVEL_EAF_MAX_RPM",
         description="Extract air fan RPM setpoint for the Maximum airflow level.",
         min_value=500,
-        max_value=4000,
+        max_value=5000,
     ),
     # Temperature control
     ModbusParameter(
