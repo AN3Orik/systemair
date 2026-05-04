@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
     ModbusConnectionError,
     SystemairApiClientError,
+    SystemairAuthError,
+    SystemairAuthRequiredError,
     SystemairClientBase,
     SystemairWebApiClient,
 )
@@ -148,6 +150,8 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self.client.write_register(register.register, value_to_write)
             await self.async_request_refresh()
+        except (SystemairAuthError, SystemairAuthRequiredError) as exc:
+            raise ConfigEntryAuthFailed(str(exc)) from exc
         except (ModbusConnectionError, SystemairApiClientError) as exc:
             msg = f"Failed to write to register {register.register}: {exc}"
             raise UpdateFailed(msg) from exc
@@ -157,6 +161,8 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self.client.write_registers_32bit(register.register, value)
             await self.async_request_refresh()
+        except (SystemairAuthError, SystemairAuthRequiredError) as exc:
+            raise ConfigEntryAuthFailed(str(exc)) from exc
         except (ModbusConnectionError, SystemairApiClientError) as exc:
             msg = f"Failed to write to 32-bit register starting at {register.register}: {exc}"
             raise UpdateFailed(msg) from exc
@@ -210,5 +216,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 enable_alarm_details=enable_alarm_details,
                 enable_alarm_history=enable_alarm_history,
             )
+        except (SystemairAuthError, SystemairAuthRequiredError) as exception:
+            raise ConfigEntryAuthFailed(str(exception)) from exception
         except (ModbusConnectionError, SystemairApiClientError) as exception:
             raise UpdateFailed(exception) from exception

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import socket
 from abc import ABC, abstractmethod
+from http import HTTPStatus
 from typing import Any, NoReturn
 
 import aiohttp
@@ -19,11 +20,18 @@ __all__ = [
     "ModbusConnectionError",
     "SystemairApiClientCommunicationError",
     "SystemairApiClientError",
+    "SystemairAuthError",
+    "SystemairAuthRequiredError",
     "SystemairClientBase",
     "SystemairModbusClient",
     "SystemairSerialClient",
     "SystemairWebApiClient",
 ]
+
+# Plain-text status strings the IAM firmware returns instead of JSON.
+# See the device-served scripts.js (>=IAM 1.4.0): ERROR, WRITE TMO, READ TMO,
+# RESPONSE TMO, EMPTY, MB DISCONNECTED, OK.
+_FIRMWARE_TRANSIENT_ERRORS = frozenset({"WRITE TMO", "READ TMO", "RESPONSE TMO", "EMPTY"})
 
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
@@ -85,6 +93,18 @@ class SystemairApiClientCommunicationError(
     SystemairApiClientError,
 ):
     """Exception to indicate a communication error."""
+
+
+class SystemairAuthError(SystemairApiClientError):
+    """The IAM rejected the supplied password (HTTP 4xx from /auth/login)."""
+
+
+class SystemairAuthRequiredError(SystemairApiClientError):
+    """The IAM has no password configured yet — user must set one in the device UI."""
+
+
+class _SessionExpiredError(Exception):
+    """Internal signal: the current request hit an unauthenticated response."""
 
 
 class SystemairClientBase(ABC):
@@ -562,33 +582,62 @@ class SystemairSerialClient(SystemairClientBase):
 
 
 class SystemairWebApiClient(SystemairClientBase):
-    """Systemair Web API Client for Modbus WebAPI."""
+    """
+    Systemair Web API Client for Modbus WebAPI.
+
+    Handles the IP-pinned session auth introduced in IAM firmware 1.4.x:
+    POST /auth/login with {"password": ...}, after which /mread and /mwrite
+    accept requests from the same source IP. Older firmware that exposes the
+    Modbus endpoints without auth still works when ``password`` is None.
+    """
 
     def __init__(
         self,
         address: str,
         session: aiohttp.ClientSession,
         max_registers_per_request: int = WEB_API_MAX_REGISTERS_PER_REQUEST,
+        password: str | None = None,
     ) -> None:
         """Systemair API Client."""
         self._address = address
         self._session = session
         self._lock = asyncio.Lock()
         self._max_registers_per_request = int(max_registers_per_request)
+        self._password = password
+        self._auth_lock = asyncio.Lock()
+        self._authenticated = False
 
     @property
     def address(self) -> str:
         """Return the device address."""
         return self._address
 
+    def set_password(self, password: str | None) -> None:
+        """Update the stored password and force re-auth on the next request."""
+        self._password = password
+        self._authenticated = False
+
     async def async_test_connection(self) -> Any:
         """Test connection to API (legacy method for compatibility)."""
         return await self.test_connection()
 
     async def test_connection(self) -> bool:
-        """Test connection to the device."""
+        """
+        Test connection to the device.
+
+        Validates an authenticated read of a known register so we surface
+        invalid-password problems here rather than during the first poll.
+        """
         try:
-            await self._api_wrapper(method="get", url=f"http://{self._address}/mread?{{}}")
+            if self._password is not None:
+                await self._ensure_authenticated(force=True)
+                await self._api_wrapper(
+                    method="get",
+                    url=f"http://{self._address}/mread?{{%221130%22:1}}",
+                    expects_data=True,
+                )
+            else:
+                await self._api_wrapper(method="get", url=f"http://{self._address}/mread?{{}}")
         except (SystemairApiClientError, SystemairApiClientCommunicationError) as e:
             LOGGER.error("Failed to connect during test: %s", e)
             return False
@@ -615,7 +664,7 @@ class SystemairWebApiClient(SystemairClientBase):
 
                 query_params = ",".join(f"%22{item.register - 1}%22:1" for item in chunk_regs)
                 url = f"http://{self._address}/mread?{{{query_params}}}"
-                result = await self._api_wrapper(method="get", url=url)
+                result = await self._api_wrapper(method="get", url=url, expects_data=True)
                 all_data.update(result)
 
             return all_data
@@ -625,14 +674,14 @@ class SystemairWebApiClient(SystemairClientBase):
         async with self._lock:
             query_params = f"%22{registry.register - 1}%22:{value}"
             url = f"http://{self._address}/mwrite?{{{query_params}}}"
-            return await self._api_wrapper(method="get", url=url)
+            return await self._api_wrapper(method="get", url=url, expects_data=True)
 
     async def write_register(self, address_1based: int, value: int) -> None:
         """Write a single holding register (compatibility with Modbus TCP client)."""
         async with self._lock:
             query_params = f"%22{address_1based - 1}%22:{value}"
             url = f"http://{self._address}/mwrite?{{{query_params}}}"
-            await self._api_wrapper(method="get", url=url)
+            await self._api_wrapper(method="get", url=url, expects_data=True)
 
     async def write_registers_32bit(self, address_1based: int, value: int) -> None:
         """Write a 32-bit value across two registers (compatibility with Modbus TCP client)."""
@@ -643,7 +692,7 @@ class SystemairWebApiClient(SystemairClientBase):
             # Write both registers: low word first, then high word
             query_params = f"%22{address_1based - 1}%22:{low_word},%22{address_1based}%22:{high_word}"
             url = f"http://{self._address}/mwrite?{{{query_params}}}"
-            await self._api_wrapper(method="get", url=url)
+            await self._api_wrapper(method="get", url=url, expects_data=True)
 
     async def get_all_data(
         self,
@@ -702,20 +751,89 @@ class SystemairWebApiClient(SystemairClientBase):
             url = f"http://{self._address}/mread?{{{query_params}}}"
 
             try:
-                result = await self._api_wrapper(method="get", url=url)
+                result = await self._api_wrapper(method="get", url=url, expects_data=True)
                 # Convert result to match Modbus TCP format (string keys)
                 all_data.update({str(k): v for k, v in result.items()})
+            except SystemairAuthError:
+                raise
+            except SystemairAuthRequiredError:
+                raise
             except SystemairApiClientError as e:
                 msg = f"Failed to read block chunk starting at {chunk_start}: {e}"
                 raise ModbusConnectionError(msg) from e
 
         return all_data
 
-    async def _parse_response(self, response: aiohttp.ClientResponse, *, retry: bool) -> Any:
-        """Parse the response."""
-        response_body = await response.text()
+    async def _ensure_authenticated(self, *, force: bool = False) -> None:
+        """
+        Log in to /auth/login if a password is configured and we're not already authed.
 
-        if not response_body or response_body.strip() == "":
+        No-op when ``self._password`` is None (older firmware that doesn't gate
+        the Modbus endpoints). Raises ``SystemairAuthRequiredError`` if the
+        device reports no password is configured yet, ``SystemairAuthError``
+        if the supplied password is rejected.
+        """
+        if self._password is None:
+            return
+
+        async with self._auth_lock:
+            if self._authenticated and not force:
+                return
+
+            status_url = f"http://{self._address}/auth/status"
+            try:
+                async with async_timeout.timeout(10):
+                    response = await self._session.get(status_url)
+                    status_payload = await response.json(content_type=None)
+            except (TimeoutError, aiohttp.ClientError, ValueError, orjson.JSONDecodeError) as exception:
+                msg = f"Failed to query /auth/status: {exception}"
+                raise SystemairApiClientCommunicationError(msg) from exception
+
+            if not status_payload.get("configured", False):
+                msg = "No password is configured on the device. Set one in the IAM web UI first."
+                raise SystemairAuthRequiredError(msg)
+
+            login_url = f"http://{self._address}/auth/login"
+            try:
+                async with async_timeout.timeout(10):
+                    response = await self._session.post(
+                        login_url,
+                        json={"password": self._password},
+                        headers={"Content-Type": "application/json"},
+                    )
+            except (TimeoutError, aiohttp.ClientError) as exception:
+                msg = f"Failed to POST /auth/login: {exception}"
+                raise SystemairApiClientCommunicationError(msg) from exception
+
+            if response.status >= HTTPStatus.BAD_REQUEST:
+                self._authenticated = False
+                body = await response.text()
+                msg = f"Device rejected password (HTTP {response.status}): {body}"
+                raise SystemairAuthError(msg)
+
+            self._authenticated = True
+            LOGGER.debug("Authenticated against %s", self._address)
+
+    async def _parse_response(
+        self,
+        response: aiohttp.ClientResponse,
+        *,
+        retry: bool,
+        expects_data: bool,
+    ) -> Any:
+        """
+        Parse the response.
+
+        Raises ``_SessionExpiredError`` when the device replies with a payload that
+        looks like an unauthenticated rejection (literal body ``ERROR`` or an
+        empty ``{}`` for a request that asked for register data). The caller
+        in ``_api_wrapper`` reacts by re-running ``_ensure_authenticated``
+        once and retrying.
+        """
+        response_body = await response.text()
+        stripped = response_body.strip() if response_body else ""
+
+        if not stripped:
             LOGGER.warning("Received empty response from device")
             if not retry:
                 msg = "Empty response from device"
@@ -725,20 +843,32 @@ class SystemairWebApiClient(SystemairClientBase):
 
         if "MB DISCONNECTED" in response_body:
             LOGGER.debug("Received 'MB DISCONNECTED', retrying...")
-
             if not retry:
                 msg = "MB DISCONNECTED"
-                raise SystemairApiClientCommunicationError(
-                    msg,
-                )
-
+                raise SystemairApiClientCommunicationError(msg)
             await asyncio.sleep(1)
             return None
+
+        if stripped == "ERROR":
+            # Generic firmware error; on session-gated endpoints this is also
+            # the response we get when the IP is no longer authenticated, so
+            # let _api_wrapper try a forced re-auth before giving up.
+            msg_0 = "Device returned ERROR"
+            raise _SessionExpiredError(msg_0)
+
+        if stripped in _FIRMWARE_TRANSIENT_ERRORS:
+            LOGGER.debug("Received firmware transient error '%s', retrying...", stripped)
+            if not retry:
+                msg = stripped
+                raise SystemairApiClientCommunicationError(msg)
+            await asyncio.sleep(1)
+            return None
+
         if "OK" in response_body:
             return response_body
 
         try:
-            return await response.json()
+            payload = await response.json(content_type=None)
         except (ValueError, orjson.JSONDecodeError) as e:
             LOGGER.warning("Failed to parse JSON response. Body: %s", response_body)
             if not retry:
@@ -747,16 +877,37 @@ class SystemairWebApiClient(SystemairClientBase):
             await asyncio.sleep(1)
             return None
 
-    async def _api_wrapper(
+        if expects_data and isinstance(payload, dict) and not payload:
+            # The caller asked for register data but the server returned `{}`.
+            # That's how the firmware responds to /mread when the source IP is
+            # not authenticated.
+            msg_0 = "Empty register payload — likely session expired"
+            raise _SessionExpiredError(msg_0)
+
+        return payload
+
+    async def _api_wrapper(  # noqa: PLR0912, PLR0915
         self,
         method: str,
         url: str,
         data: dict | None = None,
         headers: dict | None = None,
+        *,
+        expects_data: bool = False,
     ) -> Any:
-        """Get information from the API with robust retry logic."""
+        """
+        Get information from the API with robust retry logic.
+
+        ``expects_data=True`` enables session-expiry detection: when the device
+        replies with ``ERROR`` or an empty ``{}`` body, this forces a fresh
+        ``/auth/login`` and retries the request once.
+        """
         max_retries = 5
         base_delay = 0.2
+        reauth_attempts = 0
+
+        if expects_data:
+            await self._ensure_authenticated()
 
         for attempt in range(max_retries):
             try:
@@ -767,7 +918,11 @@ class SystemairWebApiClient(SystemairClientBase):
                         headers=headers,
                         json=data,
                     )
-                    parsed_response = await self._parse_response(response, retry=attempt < max_retries - 1)
+                    parsed_response = await self._parse_response(
+                        response,
+                        retry=attempt < max_retries - 1,
+                        expects_data=expects_data,
+                    )
 
                     if parsed_response is None:
                         # MB DISCONNECTED - retry with exponential backoff
@@ -782,6 +937,16 @@ class SystemairWebApiClient(SystemairClientBase):
                         continue
 
                     return parsed_response
+
+            except _SessionExpiredError as exception:
+                # Try to re-authenticate at most once per request, then retry.
+                if self._password is None or reauth_attempts >= 1:
+                    msg = f"Device returned an unauthenticated response: {exception}"
+                    raise SystemairAuthError(msg) from exception
+                reauth_attempts += 1
+                LOGGER.info("Session looks expired against %s — re-authenticating", self._address)
+                await self._ensure_authenticated(force=True)
+                continue
 
             except TimeoutError as exception:
                 if attempt < max_retries - 1:
@@ -825,6 +990,9 @@ class SystemairWebApiClient(SystemairClientBase):
                     )
                     await asyncio.sleep(delay)
                     continue
+                raise
+
+            except (SystemairAuthError, SystemairAuthRequiredError):
                 raise
 
             except Exception as exception:  # pylint: disable=broad-except
