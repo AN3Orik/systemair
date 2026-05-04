@@ -65,6 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
             address=entry.data[CONF_IP_ADDRESS],
             session=async_get_clientsession(hass),
             max_registers_per_request=max_registers,
+            password=entry.data.get(CONF_PASSWORD) or None,
         )
     elif api_type == API_TYPE_MODBUS_SERIAL:
         client = SystemairSerialClient(
