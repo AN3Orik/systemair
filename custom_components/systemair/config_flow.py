@@ -133,6 +133,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             address=user_input[CONF_IP_ADDRESS],
             session=async_get_clientsession(self.hass),
             password=user_input.get(CONF_PASSWORD) or None,
+            defer_auth_errors=False,
         )
 
         menu = await client.async_get_endpoint("menu")

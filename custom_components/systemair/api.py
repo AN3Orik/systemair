@@ -21,6 +21,7 @@ __all__ = [
     "SystemairApiClientCommunicationError",
     "SystemairApiClientError",
     "SystemairAuthError",
+    "SystemairAuthExpiredError",
     "SystemairAuthRequiredError",
     "SystemairClientBase",
     "SystemairModbusClient",
@@ -36,6 +37,13 @@ _FIRMWARE_TRANSIENT_ERRORS = frozenset({"WRITE TMO", "READ TMO", "RESPONSE TMO",
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
 WEB_API_MAX_REGISTERS_PER_REQUEST = 70
+
+# Number of consecutive auth failures (rejected /auth/login or post-reauth
+# session-expired) tolerated by the WebAPI client before we surface the error
+# to Home Assistant and trigger the reauth flow. Mirrors AUTH_FAILURE_THRESHOLD
+# in homesolution.py — at the default 60s poll interval this is ~20 min of
+# transient-tolerance before the user is prompted.
+AUTH_FAILURE_THRESHOLD = 20
 
 READ_BLOCKS_BASE = [
     (1001, 62),
@@ -105,6 +113,10 @@ class SystemairAuthRequiredError(SystemairApiClientError):
 
 class _SessionExpiredError(Exception):
     """Internal signal: the current request hit an unauthenticated response."""
+
+
+class SystemairAuthExpiredError(SystemairApiClientError):
+    """Raised when authentication has failed enough times to require user reauth."""
 
 
 class SystemairClientBase(ABC):
@@ -597,8 +609,18 @@ class SystemairWebApiClient(SystemairClientBase):
         session: aiohttp.ClientSession,
         max_registers_per_request: int = WEB_API_MAX_REGISTERS_PER_REQUEST,
         password: str | None = None,
+        *,
+        defer_auth_errors: bool = True,
     ) -> None:
-        """Systemair API Client."""
+        """
+        Systemair API Client.
+
+        ``defer_auth_errors`` controls whether transient-looking auth failures
+        (rejected login, post-reauth session-expired) are suppressed below the
+        AUTH_FAILURE_THRESHOLD count. Long-lived clients owned by the coordinator
+        want this on; one-shot clients used by the config flow want it off so
+        wrong-password errors surface immediately.
+        """
         self._address = address
         self._session = session
         self._lock = asyncio.Lock()
@@ -606,6 +628,8 @@ class SystemairWebApiClient(SystemairClientBase):
         self._password = password
         self._auth_lock = asyncio.Lock()
         self._authenticated = False
+        self._defer_auth_errors = defer_auth_errors
+        self._consecutive_auth_failures = 0
 
     @property
     def address(self) -> str:
@@ -714,6 +738,12 @@ class SystemairWebApiClient(SystemairClientBase):
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
+            # Auth failures from any block must escape — partial-data with a
+            # silent reauth-pending state would mask a real problem.
+            for result in results:
+                if isinstance(result, (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError)):
+                    raise result
+
             all_registers = {}
             has_successful_read = False
 
@@ -754,9 +784,7 @@ class SystemairWebApiClient(SystemairClientBase):
                 result = await self._api_wrapper(method="get", url=url, expects_data=True)
                 # Convert result to match Modbus TCP format (string keys)
                 all_data.update({str(k): v for k, v in result.items()})
-            except SystemairAuthError:
-                raise
-            except SystemairAuthRequiredError:
+            except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError):
                 raise
             except SystemairApiClientError as e:
                 msg = f"Failed to read block chunk starting at {chunk_start}: {e}"
@@ -808,11 +836,52 @@ class SystemairWebApiClient(SystemairClientBase):
             if response.status >= HTTPStatus.BAD_REQUEST:
                 self._authenticated = False
                 body = await response.text()
-                msg = f"Device rejected password (HTTP {response.status}): {body}"
-                raise SystemairAuthError(msg)
+                LOGGER.debug(
+                    "/auth/login on %s rejected: HTTP %s body=%r",
+                    self._address,
+                    response.status,
+                    body,
+                )
+                msg = f"Device rejected password (HTTP {response.status})"
+                self._raise_auth_failure(SystemairAuthError(msg))
 
             self._authenticated = True
+            self._consecutive_auth_failures = 0
             LOGGER.debug("Authenticated against %s", self._address)
+
+    def _raise_auth_failure(self, exc: SystemairAuthError) -> NoReturn:
+        """
+        Either suppress the auth failure as a transient comm error or surface it.
+
+        Tracks consecutive failures on the client. Below AUTH_FAILURE_THRESHOLD,
+        the failure is re-raised as ``SystemairApiClientCommunicationError`` so
+        the coordinator treats it as a regular ``UpdateFailed`` (transient) and
+        keeps polling. Once the threshold is crossed (or the client was built
+        with ``defer_auth_errors=False``), the original exception is re-raised
+        as ``SystemairAuthExpiredError`` so the coordinator triggers
+        ``ConfigEntryAuthFailed`` and Home Assistant prompts the user to reauth.
+        """
+        self._consecutive_auth_failures += 1
+        if not self._defer_auth_errors:
+            raise exc
+        if self._consecutive_auth_failures >= AUTH_FAILURE_THRESHOLD:
+            LOGGER.error(
+                "Auth failed %d times in a row against %s; surfacing reauth: %s",
+                self._consecutive_auth_failures,
+                self._address,
+                exc,
+            )
+            msg = f"Authentication failed {self._consecutive_auth_failures} times: {exc}"
+            raise SystemairAuthExpiredError(msg) from exc
+        LOGGER.warning(
+            "Auth failure %d/%d against %s; treating as transient: %s",
+            self._consecutive_auth_failures,
+            AUTH_FAILURE_THRESHOLD,
+            self._address,
+            exc,
+        )
+        msg = f"Auth failure (attempt {self._consecutive_auth_failures}/{AUTH_FAILURE_THRESHOLD}): {exc}"
+        raise SystemairApiClientCommunicationError(msg) from exc
 
     async def _parse_response(
         self,
@@ -936,15 +1005,16 @@ class SystemairWebApiClient(SystemairClientBase):
                         await asyncio.sleep(delay)
                         continue
 
+                    self._consecutive_auth_failures = 0
                     return parsed_response
 
             except _SessionExpiredError as exception:
                 # Try to re-authenticate at most once per request, then retry.
                 if self._password is None or reauth_attempts >= 1:
                     msg = f"Device returned an unauthenticated response: {exception}"
-                    raise SystemairAuthError(msg) from exception
+                    self._raise_auth_failure(SystemairAuthError(msg))
                 reauth_attempts += 1
-                LOGGER.info("Session looks expired against %s — re-authenticating", self._address)
+                LOGGER.debug("Session looks expired against %s — re-authenticating", self._address)
                 await self._ensure_authenticated(force=True)
                 continue
 
@@ -992,7 +1062,7 @@ class SystemairWebApiClient(SystemairClientBase):
                     continue
                 raise
 
-            except (SystemairAuthError, SystemairAuthRequiredError):
+            except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError):
                 raise
 
             except Exception as exception:  # pylint: disable=broad-except

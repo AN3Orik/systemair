@@ -4,13 +4,13 @@ import asyncio
 import logging
 from typing import Any
 
-from .api import SystemairApiClientError, SystemairClientBase
+from .api import SystemairApiClientError, SystemairAuthExpiredError, SystemairClientBase
 from .homesolution_mapping import PRESET_MODE_TO_VALUE_MAP, PRESET_TO_USER_MODE
 from .modbus import parameters_list
 from .systemair_api import SystemairAPI, SystemairAuthenticator
 from .systemair_api.api.websocket_client import SystemairWebSocket
 from .systemair_api.models.ventilation_unit import VentilationUnit
-from .systemair_api.utils.exceptions import DeviceOfflineError
+from .systemair_api.utils.exceptions import AuthenticationError, DeviceOfflineError, TokenRefreshError
 from .systemair_api.utils.register_constants import RegisterConstants
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,6 +21,10 @@ REG_TC_SP = 2001
 REG_USERMODE_HMI_CHANGE_REQUEST = 1162
 REG_FILTER_REPLACEMENT_TIME_L = 601
 REG_ECO_MODE_ON_OFF = 1134
+
+# Number of consecutive auth failures (refresh + full re-login) tolerated before
+# we surface the error to Home Assistant and trigger the reauth flow.
+AUTH_FAILURE_THRESHOLD = 20
 
 
 def _build_modbus_to_api_map() -> dict[int, int]:
@@ -64,6 +68,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         self.unit: VentilationUnit | None = None
         self.update_callback = None
         self._available = False
+        self._auth_failure_count = 0
 
     async def test_connection(self) -> bool:
         """
@@ -120,6 +125,49 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             except Exception as e:  # noqa: BLE001
                 _LOGGER.warning("Failed to disconnect WebSocket: %s", e)
 
+    async def _ensure_authenticated(self) -> bool:
+        """
+        Ensure we have a valid access token.
+
+        Returns True if the token was rotated (refresh or full re-login) so callers
+        can refresh dependent connections (WebSocket, API client). Falls back to a
+        full re-authentication using the stored credentials if the refresh token
+        has been invalidated server-side, avoiding a Home Assistant reauth prompt.
+        """
+        if self.authenticator.is_token_valid():
+            self._auth_failure_count = 0
+            return False
+
+        try:
+            await asyncio.to_thread(self.authenticator.refresh_access_token)
+            _LOGGER.debug("Access token refreshed for device %s", self.device_id)
+        except TokenRefreshError as err:
+            _LOGGER.info(
+                "Refresh token rejected for device %s (%s); performing silent re-authentication",
+                self.device_id,
+                err,
+            )
+            await asyncio.to_thread(self.authenticator.authenticate)
+
+        self._auth_failure_count = 0
+        return True
+
+    async def _reconnect_websocket(self) -> None:
+        """Disconnect any existing WebSocket and reopen with the current token."""
+        if self.websocket is not None:
+            try:
+                await asyncio.to_thread(self.websocket.disconnect)
+            except Exception as e:  # noqa: BLE001
+                _LOGGER.warning("Failed to disconnect WebSocket: %s", e)
+            self.websocket = None
+
+        try:
+            self.websocket = SystemairWebSocket(access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message)
+            await asyncio.to_thread(self.websocket.connect)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
+            self.websocket = None
+
     async def get_all_data(
         self,
         *,
@@ -127,26 +175,35 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         _enable_alarm_history: bool = False,
     ) -> VentilationUnit:
         """Get all data."""
-        if not self.authenticator.is_token_valid():
-            await asyncio.to_thread(self.authenticator.refresh_access_token)
-            self.api.update_token(self.authenticator.access_token)
-
-            # Reconnect WS with new token
-            if self.websocket is not None:
-                try:
-                    await asyncio.to_thread(self.websocket.disconnect)
-                except Exception as e:  # noqa: BLE001
-                    _LOGGER.warning("Failed to disconnect WebSocket during token refresh: %s", e)
-
-            try:
-                self.websocket = SystemairWebSocket(
-                    access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message
+        try:
+            if await self._ensure_authenticated():
+                self.api.update_token(self.authenticator.access_token)
+                await self._reconnect_websocket()
+            elif self.websocket is None:
+                # Token still valid but WS was lost (e.g. transient network drop).
+                # Re-open it so real-time updates resume without waiting for a token rotation.
+                await self._reconnect_websocket()
+        except AuthenticationError as err:
+            self._available = False
+            self._auth_failure_count += 1
+            if self._auth_failure_count >= AUTH_FAILURE_THRESHOLD:
+                _LOGGER.exception(
+                    "Authentication failed %d times in a row for device %s; surfacing reauth",
+                    self._auth_failure_count,
+                    self.device_id,
                 )
-                await asyncio.to_thread(self.websocket.connect)
-            except Exception as e:  # noqa: BLE001
-                self._available = False
-                _LOGGER.warning("Failed to reconnect WebSocket during token refresh: %s. Real-time updates will be unavailable.", e)
-                self.websocket = None
+                msg = f"Authentication failed {self._auth_failure_count} times: {err}"
+                raise SystemairAuthExpiredError(msg) from err
+
+            _LOGGER.warning(
+                "Authentication failed for device %s (attempt %d/%d): %s",
+                self.device_id,
+                self._auth_failure_count,
+                AUTH_FAILURE_THRESHOLD,
+                err,
+            )
+            msg = f"Authentication failed (attempt {self._auth_failure_count}/{AUTH_FAILURE_THRESHOLD}): {err}"
+            raise SystemairApiClientError(msg) from err
 
         # We can rely on WebSocket updates, but a periodic poll ensures consistency
         if self.unit is None:
