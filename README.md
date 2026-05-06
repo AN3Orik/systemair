@@ -55,6 +55,7 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
 2.  The IAM module must be connected to the same local network as your Home Assistant instance.
 3.  You need to know the IP address of the IAM module. You can typically find this in your router's client list.
 4.  The IAM module's web interface should be accessible via HTTP.
+5.  If the IAM web interface is password-protected, you need to know the device password.
 
 ## Installation
 
@@ -108,6 +109,7 @@ Configure connection via USB-to-Modbus RS485 converter:
 Configure connection to SAVECONNECT 2.0 IAM module:
 
 *   **IP Address:** The IP address of your SAVECONNECT 2.0 IAM module (e.g., `192.168.1.50`).
+*   **Device Password (Optional):** Enter the password used by the SAVECONNECT 2.0 IAM web interface if one is configured.
 *   **Ventilation Unit Model (Optional):** You can manually select your unit model, or leave it empty to auto-detect from the device.
 
 ---
