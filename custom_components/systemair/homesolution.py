@@ -162,9 +162,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             self.websocket = None
 
         try:
-            self.websocket = SystemairWebSocket(
-                access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message
-            )
+            self.websocket = SystemairWebSocket(access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message)
             await asyncio.to_thread(self.websocket.connect)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
