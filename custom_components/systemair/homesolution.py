@@ -126,7 +126,8 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                 _LOGGER.warning("Failed to disconnect WebSocket: %s", e)
 
     async def _ensure_authenticated(self) -> bool:
-        """Ensure we have a valid access token.
+        """
+        Ensure we have a valid access token.
 
         Returns True if the token was rotated (refresh or full re-login) so callers
         can refresh dependent connections (WebSocket, API client). Falls back to a
@@ -188,11 +189,10 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             self._available = False
             self._auth_failure_count += 1
             if self._auth_failure_count >= AUTH_FAILURE_THRESHOLD:
-                _LOGGER.error(
-                    "Authentication failed %d times in a row for device %s; surfacing reauth: %s",
+                _LOGGER.exception(
+                    "Authentication failed %d times in a row for device %s; surfacing reauth",
                     self._auth_failure_count,
                     self.device_id,
-                    err,
                 )
                 msg = f"Authentication failed {self._auth_failure_count} times: {err}"
                 raise SystemairAuthExpiredError(msg) from err

@@ -612,7 +612,8 @@ class SystemairWebApiClient(SystemairClientBase):
         *,
         defer_auth_errors: bool = True,
     ) -> None:
-        """Systemair API Client.
+        """
+        Systemair API Client.
 
         ``defer_auth_errors`` controls whether transient-looking auth failures
         (rejected login, post-reauth session-expired) are suppressed below the
@@ -849,7 +850,8 @@ class SystemairWebApiClient(SystemairClientBase):
             LOGGER.debug("Authenticated against %s", self._address)
 
     def _raise_auth_failure(self, exc: SystemairAuthError) -> NoReturn:
-        """Either suppress the auth failure as a transient comm error or surface it.
+        """
+        Either suppress the auth failure as a transient comm error or surface it.
 
         Tracks consecutive failures on the client. Below AUTH_FAILURE_THRESHOLD,
         the failure is re-raised as ``SystemairApiClientCommunicationError`` so
