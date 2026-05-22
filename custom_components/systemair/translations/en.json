@@ -42,9 +42,9 @@
             },
             "reauth_confirm": {
                 "title": "Re-authenticate Systemair",
-                "description": "The device password has changed or the session was lost. Re-enter the password used in the IAM web UI.",
+                "description": "Enter the IAM web UI password to enable authenticated WebAPI access, or leave it blank to disable authentication for older firmware.",
                 "data": {
-                    "password": "Device password"
+                    "password": "Device password (optional)"
                 }
             },
             "homesolution": {
@@ -60,7 +60,7 @@
             "cannot_connect": "Unable to connect to the device. Please check the connection details and ensure the device is online.",
             "invalid_auth": "Invalid authentication credentials.",
             "password_required": "This device has a password configured. Please enter it.",
-            "password_not_set": "No password is configured on the device. Open the IAM web UI in a browser to create one, then try again.",
+            "password_not_set": "No password is configured on the device. Leave the field empty for older firmware, or create a password in the IAM web UI and try again.",
             "no_devices_found": "No ventilation units found on this account.",
             "unknown": "An unknown error occurred."
         },

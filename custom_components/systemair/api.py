@@ -32,6 +32,7 @@ __all__ = [
 # See the device-served scripts.js (>=IAM 1.4.0): ERROR, WRITE TMO, READ TMO,
 # RESPONSE TMO, EMPTY, MB DISCONNECTED, OK.
 _FIRMWARE_TRANSIENT_ERRORS = frozenset({"WRITE TMO", "READ TMO", "RESPONSE TMO", "EMPTY"})
+_UNHANDLED_RESPONSE = object()
 
 MODBUS_DEVICE_BUSY_EXCEPTION = 6
 MODBUS_GATEWAY_TARGET_FAILED_TO_RESPOND = 11
@@ -814,6 +815,54 @@ class SystemairWebApiClient(SystemairClientBase):
             self._authenticated = True
             LOGGER.debug("Authenticated against %s", self._address)
 
+    async def _retry_or_raise_communication_error(
+        self,
+        *,
+        retry: bool,
+        message: str,
+        cause: BaseException | None = None,
+    ) -> None:
+        """Sleep before retrying a transient response, or raise after the final attempt."""
+        if not retry:
+            if cause is not None:
+                raise SystemairApiClientCommunicationError(message) from cause
+            raise SystemairApiClientCommunicationError(message)
+        await asyncio.sleep(1)
+
+    async def _parse_text_response(self, response_body: str, stripped: str, *, retry: bool) -> Any:
+        """Handle plain-text firmware responses before trying JSON parsing."""
+        if not stripped:
+            LOGGER.warning("Received empty response from device")
+            await self._retry_or_raise_communication_error(retry=retry, message="Empty response from device")
+            return None
+
+        if "MB DISCONNECTED" in response_body:
+            LOGGER.debug("Received 'MB DISCONNECTED', retrying...")
+            await self._retry_or_raise_communication_error(retry=retry, message="MB DISCONNECTED")
+            return None
+
+        if stripped == "ERROR":
+            if self._password is not None:
+                # On session-gated endpoints this is the response we get when
+                # the IP is no longer authenticated, so let _api_wrapper try a
+                # forced re-auth before giving up.
+                msg = "Device returned ERROR"
+                raise _SessionExpiredError(msg)
+
+            LOGGER.debug("Received firmware error response, retrying...")
+            await self._retry_or_raise_communication_error(retry=retry, message="Device returned ERROR")
+            return None
+
+        if stripped in _FIRMWARE_TRANSIENT_ERRORS:
+            LOGGER.debug("Received firmware transient error '%s', retrying...", stripped)
+            await self._retry_or_raise_communication_error(retry=retry, message=stripped)
+            return None
+
+        if "OK" in response_body:
+            return response_body
+
+        return _UNHANDLED_RESPONSE
+
     async def _parse_response(
         self,
         response: aiohttp.ClientResponse,
@@ -833,56 +882,28 @@ class SystemairWebApiClient(SystemairClientBase):
         response_body = await response.text()
         stripped = response_body.strip() if response_body else ""
 
-        if not stripped:
-            LOGGER.warning("Received empty response from device")
-            if not retry:
-                msg = "Empty response from device"
-                raise SystemairApiClientCommunicationError(msg)
-            await asyncio.sleep(1)
-            return None
-
-        if "MB DISCONNECTED" in response_body:
-            LOGGER.debug("Received 'MB DISCONNECTED', retrying...")
-            if not retry:
-                msg = "MB DISCONNECTED"
-                raise SystemairApiClientCommunicationError(msg)
-            await asyncio.sleep(1)
-            return None
-
-        if stripped == "ERROR":
-            # Generic firmware error; on session-gated endpoints this is also
-            # the response we get when the IP is no longer authenticated, so
-            # let _api_wrapper try a forced re-auth before giving up.
-            msg_0 = "Device returned ERROR"
-            raise _SessionExpiredError(msg_0)
-
-        if stripped in _FIRMWARE_TRANSIENT_ERRORS:
-            LOGGER.debug("Received firmware transient error '%s', retrying...", stripped)
-            if not retry:
-                msg = stripped
-                raise SystemairApiClientCommunicationError(msg)
-            await asyncio.sleep(1)
-            return None
-
-        if "OK" in response_body:
-            return response_body
+        text_response = await self._parse_text_response(response_body, stripped, retry=retry)
+        if text_response is not _UNHANDLED_RESPONSE:
+            return text_response
 
         try:
             payload = await response.json(content_type=None)
         except (ValueError, orjson.JSONDecodeError) as e:
             LOGGER.warning("Failed to parse JSON response. Body: %s", response_body)
-            if not retry:
-                msg = f"Invalid JSON response: {e}"
-                raise SystemairApiClientCommunicationError(msg) from e
-            await asyncio.sleep(1)
+            await self._retry_or_raise_communication_error(retry=retry, message=f"Invalid JSON response: {e}", cause=e)
             return None
 
         if expects_data and isinstance(payload, dict) and not payload:
             # The caller asked for register data but the server returned `{}`.
-            # That's how the firmware responds to /mread when the source IP is
-            # not authenticated.
-            msg_0 = "Empty register payload — likely session expired"
-            raise _SessionExpiredError(msg_0)
+            # That's how authenticated firmware responds to /mread when the
+            # source IP is not authenticated.
+            if self._password is not None:
+                msg = "Empty register payload — likely session expired"
+                raise _SessionExpiredError(msg)
+
+            LOGGER.debug("Received empty register payload, retrying...")
+            await self._retry_or_raise_communication_error(retry=retry, message="Empty register payload")
+            return None
 
         return payload
 
@@ -940,7 +961,10 @@ class SystemairWebApiClient(SystemairClientBase):
 
             except _SessionExpiredError as exception:
                 # Try to re-authenticate at most once per request, then retry.
-                if self._password is None or reauth_attempts >= 1:
+                if self._password is None:
+                    msg = f"Device returned an authenticated-only response with no password configured: {exception}"
+                    raise SystemairApiClientCommunicationError(msg) from exception
+                if reauth_attempts >= 1:
                     msg = f"Device returned an unauthenticated response: {exception}"
                     raise SystemairAuthError(msg) from exception
                 reauth_attempts += 1

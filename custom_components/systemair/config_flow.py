@@ -125,9 +125,8 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         Validate the connection via Web API and return device info.
 
-        Probes /auth/status first. If the device has a password configured,
-        the supplied password is required and is verified by performing a real
-        authenticated /mread of register 1131 (REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF).
+        If a password was supplied, verify it by performing a real authenticated
+        /mread of register 1131 (REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF).
         """
         client = SystemairWebApiClient(
             address=user_input[CONF_IP_ADDRESS],
@@ -148,15 +147,6 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "mac_address": menu["mac"],
             "model": unit_version["MB Model"],
         }
-
-    async def _webapi_status(self, ip_address: str) -> dict[str, Any]:
-        """Read /auth/status to decide whether to ask for a password."""
-        client = SystemairWebApiClient(
-            address=ip_address,
-            session=async_get_clientsession(self.hass),
-        )
-        response = await client.async_get_endpoint("auth/status")
-        return response if isinstance(response, dict) else {}
 
     async def _get_homesolution_devices(self, user_input: dict) -> list[dict[str, Any]]:
         """Validate HomeSolution credentials and get list of devices."""
@@ -356,74 +346,53 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_modbus_webapi(  # noqa: PLR0912
-        self, user_input: dict | None = None
-    ) -> config_entries.ConfigFlowResult:
+    async def async_step_modbus_webapi(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Handle Modbus WebAPI configuration."""
         errors: dict[str, str] = {}
-        require_password = False
 
         if user_input is not None:
-            ip_address = user_input.get(CONF_IP_ADDRESS, "").strip()
+            user_input[CONF_IP_ADDRESS] = user_input.get(CONF_IP_ADDRESS, "").strip()
             try:
-                status = await self._webapi_status(ip_address)
+                device_info = await self._validate_webapi_connection(user_input)
+            except SystemairAuthRequiredError as exception:
+                LOGGER.error(exception)
+                errors["base"] = "password_not_set"
+            except SystemairAuthError as exception:
+                LOGGER.error(exception)
+                errors["base"] = "invalid_auth"
             except SystemairApiClientCommunicationError as exception:
-                LOGGER.error("Cannot reach %s: %s", ip_address, exception)
+                LOGGER.error(exception)
                 errors["base"] = "cannot_connect"
             except SystemairApiClientError as exception:
                 LOGGER.exception(exception)
                 errors["base"] = "unknown"
             else:
-                require_password = bool(status.get("configured", False))
-                if require_password and not user_input.get(CONF_PASSWORD):
-                    errors["base"] = "password_required"
-                else:
-                    try:
-                        device_info = await self._validate_webapi_connection(user_input)
-                    except SystemairAuthRequiredError as exception:
-                        LOGGER.error(exception)
-                        errors["base"] = "password_not_set"
-                    except SystemairAuthError as exception:
-                        LOGGER.error(exception)
-                        errors["base"] = "invalid_auth"
-                    except SystemairApiClientCommunicationError as exception:
-                        LOGGER.error(exception)
-                        errors["base"] = "cannot_connect"
-                    except SystemairApiClientError as exception:
-                        LOGGER.exception(exception)
-                        errors["base"] = "unknown"
-                    else:
-                        await self.async_set_unique_id(device_info["mac_address"])
-                        self._abort_if_unique_id_configured()
+                await self.async_set_unique_id(device_info["mac_address"])
+                self._abort_if_unique_id_configured()
 
-                        user_input[CONF_API_TYPE] = API_TYPE_MODBUS_WEBAPI
+                user_input[CONF_API_TYPE] = API_TYPE_MODBUS_WEBAPI
 
-                        # Use device model if user didn't select one manually
-                        if CONF_MODEL not in user_input or not user_input[CONF_MODEL]:
-                            user_input[CONF_MODEL] = device_info.get("model", next(iter(MODEL_SPECS)))
+                # Use device model if user didn't select one manually
+                if CONF_MODEL not in user_input or not user_input[CONF_MODEL]:
+                    user_input[CONF_MODEL] = device_info.get("model", next(iter(MODEL_SPECS)))
 
-                        # Strip empty password so we don't persist it
-                        if not user_input.get(CONF_PASSWORD):
-                            user_input.pop(CONF_PASSWORD, None)
+                # Strip empty password so we don't persist it
+                if not user_input.get(CONF_PASSWORD):
+                    user_input.pop(CONF_PASSWORD, None)
 
-                        return self.async_create_entry(
-                            title=user_input[CONF_MODEL],
-                            data=user_input,
-                        )
+                return self.async_create_entry(
+                    title=user_input[CONF_MODEL],
+                    data=user_input,
+                )
 
         schema_dict: dict[Any, Any] = {
             vol.Required(CONF_IP_ADDRESS, default=(user_input or {}).get(CONF_IP_ADDRESS, "")): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
             ),
         }
-        if require_password or (user_input is not None and CONF_PASSWORD in user_input):
-            schema_dict[vol.Required(CONF_PASSWORD)] = selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            )
-        else:
-            schema_dict[vol.Optional(CONF_PASSWORD)] = selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            )
+        schema_dict[vol.Optional(CONF_PASSWORD)] = selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        )
         schema_dict[vol.Optional(CONF_MODEL)] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=list(MODEL_SPECS.keys()),
@@ -443,12 +412,18 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
-        """Prompt for a fresh password and verify it against the device."""
+        """Prompt for updated WebAPI auth settings and verify them against the device."""
         errors: dict[str, str] = {}
         entry = self._get_reauth_entry()
 
         if user_input is not None:
-            merged = {**self._reauth_entry_data, CONF_PASSWORD: user_input[CONF_PASSWORD]}
+            password = user_input.get(CONF_PASSWORD) or None
+            merged = dict(self._reauth_entry_data)
+            if password is None:
+                merged.pop(CONF_PASSWORD, None)
+            else:
+                merged[CONF_PASSWORD] = password
+
             try:
                 await self._validate_webapi_connection(merged)
             except SystemairAuthRequiredError as exception:
@@ -464,9 +439,15 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 LOGGER.exception(exception)
                 errors["base"] = "unknown"
             else:
+                data = dict(entry.data)
+                if password is None:
+                    data.pop(CONF_PASSWORD, None)
+                else:
+                    data[CONF_PASSWORD] = password
+
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data={**entry.data, CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    data=data,
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
@@ -475,7 +456,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reauth_confirm",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_PASSWORD): selector.TextSelector(
+                    vol.Optional(CONF_PASSWORD): selector.TextSelector(
                         selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                     ),
                 }
