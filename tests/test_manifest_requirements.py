@@ -65,3 +65,4 @@ class ManifestRequirementsTest(unittest.TestCase):
 
         self.assertFalse(_allows_version(requirement, "3.11.1"))
         self.assertFalse(_allows_version(requirement, "3.9.2"))
+        self.assertFalse(_allows_version(requirement, "3.14.0"))
