@@ -1,3 +1,5 @@
+"""Regression tests for package requirements declared in the integration manifest."""
+
 from __future__ import annotations
 
 import json
@@ -18,11 +20,10 @@ def _pymodbus_requirement() -> str:
 
 
 def _allows_version(requirement: str, version: str) -> bool:
-    specifiers = requirement.removeprefix("pymodbus").split(",")
     version_tuple = _version_tuple(version)
 
-    for specifier in specifiers:
-        specifier = specifier.strip()
+    for raw_specifier in requirement.removeprefix("pymodbus").split(","):
+        specifier = raw_specifier.strip()
         if not specifier:
             continue
 
@@ -46,23 +47,26 @@ def _allows_version(requirement: str, version: str) -> bool:
                 return False
             continue
 
-        if specifier.startswith("<"):
-            if version_tuple >= _version_tuple(specifier[1:]):
-                return False
+        if specifier.startswith("<") and version_tuple >= _version_tuple(specifier[1:]):
+            return False
 
     return True
 
 
 class ManifestRequirementsTest(unittest.TestCase):
+    """Regression coverage for the integration manifest requirements."""
+
     def test_pymodbus_requirement_allows_supported_versions(self) -> None:
+        """The manifest must allow both currently supported Home Assistant dependency sets."""
         requirement = _pymodbus_requirement()
 
-        self.assertTrue(_allows_version(requirement, "3.11.2"))
-        self.assertTrue(_allows_version(requirement, "3.13.1"))
+        assert _allows_version(requirement, "3.11.2")  # noqa: S101
+        assert _allows_version(requirement, "3.13.1")  # noqa: S101
 
     def test_pymodbus_requirement_rejects_unsupported_older_versions(self) -> None:
+        """The manifest should not widen support below the declared Home Assistant baseline."""
         requirement = _pymodbus_requirement()
 
-        self.assertFalse(_allows_version(requirement, "3.11.1"))
-        self.assertFalse(_allows_version(requirement, "3.9.2"))
-        self.assertFalse(_allows_version(requirement, "3.14.0"))
+        assert not _allows_version(requirement, "3.11.1")  # noqa: S101
+        assert not _allows_version(requirement, "3.9.2")  # noqa: S101
+        assert not _allows_version(requirement, "3.14.0")  # noqa: S101
