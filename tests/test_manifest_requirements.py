@@ -6,7 +6,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 MANIFEST_PATH = Path("custom_components/systemair/manifest.json")
 
 
