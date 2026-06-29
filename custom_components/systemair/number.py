@@ -239,6 +239,7 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
     SystemairNumberEntityDescription(
         key="modbus_co2_input",
         translation_key="modbus_co2_input",
+        entity_category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.CO2,
         native_step=1,
         mode=NumberMode.BOX,
@@ -249,6 +250,7 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
     SystemairNumberEntityDescription(
         key="modbus_rh_input",
         translation_key="modbus_rh_input",
+        entity_category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.HUMIDITY,
         native_step=1,
         mode=NumberMode.BOX,
@@ -259,6 +261,7 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
     SystemairNumberEntityDescription(
         key="rh_setpoint_summer",
         translation_key="rh_setpoint_summer",
+        entity_category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.HUMIDITY,
         native_step=1,
         mode=NumberMode.SLIDER,
@@ -269,6 +272,7 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
     SystemairNumberEntityDescription(
         key="rh_setpoint_winter",
         translation_key="rh_setpoint_winter",
+        entity_category=EntityCategory.CONFIG,
         device_class=NumberDeviceClass.HUMIDITY,
         native_step=1,
         mode=NumberMode.SLIDER,
