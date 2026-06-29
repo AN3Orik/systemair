@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
@@ -108,6 +109,7 @@ DEFROSTING_STATE_MAP = {
     3: "Secondary air",
     4: "Error",
 }
+SUMMER_WINTER_STATE_MAP = {0: "Summer", 1: "Winter", 2: "Spring/Autumn"}
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -229,6 +231,14 @@ ENTITY_DESCRIPTIONS = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
         registry=parameter_map["REG_SENSOR_RHS_PDM"],
+    ),
+    SystemairSensorEntityDescription(
+        key="co2_level",
+        translation_key="co2_level",
+        device_class=SensorDeviceClass.CO2,
+        native_unit_of_measurement=CONCENTRATION_PARTS_PER_MILLION,
+        state_class=SensorStateClass.MEASUREMENT,
+        registry=parameter_map["REG_DEMC_CO2_HIGHEST"],
     ),
     SystemairSensorEntityDescription(
         key="meter_saf_rpm",
@@ -369,6 +379,15 @@ ENTITY_DESCRIPTIONS = (
         registry=parameter_map["REG_DEFROSTING_STATE"],
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    SystemairSensorEntityDescription(
+        key="summer_winter_state",
+        translation_key="summer_winter_state",
+        icon="mdi:sun-snowflake",
+        device_class=SensorDeviceClass.ENUM,
+        options=["Summer", "Winter", "Spring/Autumn"],
+        registry=parameter_map["REG_SUMMER_WINTER_STATE"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     *(
         SystemairSensorEntityDescription(
             key=f"alarm_{param.short.lower()}",
@@ -424,6 +443,7 @@ class SystemairSensor(SystemairEntity, SensorEntity):
         "demand_active_controller": DEMAND_CONTROLLER_MAP,
         "auto_mode_source": AUTO_MODE_SOURCE_MAP,
         "defrosting_state": DEFROSTING_STATE_MAP,
+        "summer_winter_state": SUMMER_WINTER_STATE_MAP,
     }
 
     def __init__(
