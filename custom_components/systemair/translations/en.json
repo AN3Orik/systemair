@@ -246,6 +246,12 @@
             "modbus_rh_input": {
                 "name": "Modbus Humidity Input"
             },
+            "rh_setpoint_summer": {
+                "name": "RH Setpoint Summer"
+            },
+            "rh_setpoint_winter": {
+                "name": "RH Setpoint Winter"
+            },
             "fan_level_saf_min_rpm": {
                 "name": "Fan Level Minimum: Supply RPM"
             },
@@ -298,6 +304,9 @@
             },
             "extract_air_relative_humidity": {
                 "name": "Extract air relative humidity"
+            },
+            "co2_level": {
+                "name": "CO2"
             },
             "meter_saf_rpm": {
                 "name": "Supply air fan RPM"
@@ -362,6 +371,9 @@
                     "secondary_air": "Secondary air",
                     "error": "Error"
                 }
+            },
+            "summer_winter_state": {
+                "name": "Season Mode"
             },
             "supply_fan_power": {
                 "name": "Supply Fan Power"
