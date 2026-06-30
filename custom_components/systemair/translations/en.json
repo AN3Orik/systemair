@@ -159,6 +159,7 @@
                 "state_attributes": {
                     "preset_mode": {
                         "state": {
+                            "auto": "Auto",
                             "manual": "Manual",
                             "crowded": "Crowded",
                             "refresh": "Refresh",

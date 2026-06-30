@@ -160,6 +160,7 @@
                 "state_attributes": {
                     "preset_mode": {
                         "state": {
+                            "auto": "Авто",
                             "manual": "Ручной",
                             "crowded": "Многолюдно",
                             "refresh": "Проветривание",
