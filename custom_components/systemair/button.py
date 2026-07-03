@@ -48,7 +48,6 @@ async def async_setup_entry(
 ) -> None:
     """Set up the button platform."""
     if entry.runtime_data.profile.profile_id != DEVICE_PROFILE_SAVE:
-        async_add_entities([])
         return
 
     coordinator = entry.runtime_data.coordinator

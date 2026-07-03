@@ -442,7 +442,24 @@ D24810_NUMBER_ENTITIES = (
     ),
 )
 
-d24810_parameter_map = {param.short: param for param in D24810_PARAMETERS}
+
+def _parameter_map(parameters: list[ModbusParameter]) -> dict[str, ModbusParameter]:
+    """Build a D24810 register map and fail fast on manual registry typos."""
+    by_short: dict[str, ModbusParameter] = {}
+    by_register: dict[int, ModbusParameter] = {}
+    for param in parameters:
+        if param.short in by_short:
+            msg = f"Duplicate D24810 parameter short name: {param.short}"
+            raise ValueError(msg)
+        if param.register in by_register:
+            msg = f"Duplicate D24810 register address: {param.register}"
+            raise ValueError(msg)
+        by_short[param.short] = param
+        by_register[param.register] = param
+    return by_short
+
+
+d24810_parameter_map = _parameter_map(D24810_PARAMETERS)
 
 D24810_PROFILE = DeviceProfile(
     profile_id="legacy_d24810",
@@ -458,7 +475,7 @@ D24810_PROFILE = DeviceProfile(
     ),
     registry=d24810_parameter_map,
     read_blocks=_compact_read_blocks(D24810_PARAMETERS),
-    test_register=501,
+    test_register=d24810_parameter_map["REG_SYSTEM_TYPE"].register,
     model_options=(
         "VR400",
         "VR700",

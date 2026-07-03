@@ -15,6 +15,7 @@ from pymodbus.exceptions import ConnectionException
 
 from .const import LOGGER
 from .modbus import ModbusParameter
+from .profiles.base import ReadBlock
 from .profiles.save import SAVE_PROFILE
 
 __all__ = [
@@ -106,6 +107,22 @@ class SystemairClientBase(ABC):
         """Get all data from device."""
 
 
+def _resolve_profile_defaults(
+    *,
+    read_blocks: tuple[ReadBlock, ...] | None,
+    alarm_detail_blocks: tuple[ReadBlock, ...] | None,
+    alarm_history_blocks: tuple[ReadBlock, ...] | None,
+    test_register: int | None,
+) -> tuple[tuple[ReadBlock, ...], tuple[ReadBlock, ...], tuple[ReadBlock, ...], int]:
+    """Resolve optional profile settings without treating explicit falsy overrides as missing."""
+    return (
+        read_blocks if read_blocks is not None else SAVE_PROFILE.read_blocks,
+        alarm_detail_blocks if alarm_detail_blocks is not None else SAVE_PROFILE.alarm_detail_blocks,
+        alarm_history_blocks if alarm_history_blocks is not None else SAVE_PROFILE.alarm_history_blocks,
+        test_register if test_register is not None else SAVE_PROFILE.test_register,
+    )
+
+
 class SystemairModbusClient(SystemairClientBase):
     """Provides a client for interacting with a Systemair unit via Modbus TCP."""
 
@@ -126,10 +143,12 @@ class SystemairModbusClient(SystemairClientBase):
         self._port = port
         self._timeout = timeout
         self.slave_id = slave_id
-        self.read_blocks = read_blocks or SAVE_PROFILE.read_blocks
-        self.alarm_detail_blocks = alarm_detail_blocks if alarm_detail_blocks is not None else SAVE_PROFILE.alarm_detail_blocks
-        self.alarm_history_blocks = alarm_history_blocks if alarm_history_blocks is not None else SAVE_PROFILE.alarm_history_blocks
-        self.test_register = test_register or SAVE_PROFILE.test_register
+        self.read_blocks, self.alarm_detail_blocks, self.alarm_history_blocks, self.test_register = _resolve_profile_defaults(
+            read_blocks=read_blocks,
+            alarm_detail_blocks=alarm_detail_blocks,
+            alarm_history_blocks=alarm_history_blocks,
+            test_register=test_register,
+        )
 
         self._client: AsyncModbusTcpClient | None = None
         self._lock = asyncio.Lock()
@@ -355,10 +374,12 @@ class SystemairSerialClient(SystemairClientBase):
         self._parity = parity
         self._stopbits = stopbits
         self._slave_id = slave_id
-        self.read_blocks = read_blocks or SAVE_PROFILE.read_blocks
-        self.alarm_detail_blocks = alarm_detail_blocks if alarm_detail_blocks is not None else SAVE_PROFILE.alarm_detail_blocks
-        self.alarm_history_blocks = alarm_history_blocks if alarm_history_blocks is not None else SAVE_PROFILE.alarm_history_blocks
-        self.test_register = test_register or SAVE_PROFILE.test_register
+        self.read_blocks, self.alarm_detail_blocks, self.alarm_history_blocks, self.test_register = _resolve_profile_defaults(
+            read_blocks=read_blocks,
+            alarm_detail_blocks=alarm_detail_blocks,
+            alarm_history_blocks=alarm_history_blocks,
+            test_register=test_register,
+        )
         self._client: AsyncModbusSerialClient | None = None
         self._lock = asyncio.Lock()
         self._is_running = False

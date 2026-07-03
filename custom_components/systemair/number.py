@@ -24,6 +24,7 @@ from homeassistant.exceptions import HomeAssistantError
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -396,18 +397,23 @@ def _profile_number_descriptions(profile: DeviceProfile) -> tuple[SystemairNumbe
     if profile.profile_id == DEVICE_PROFILE_SAVE:
         return NUMBERS
 
-    return tuple(
-        SystemairNumberEntityDescription(
-            key=desc.key,
-            translation_key=desc.translation_key,
-            native_unit_of_measurement=desc.native_unit_of_measurement,
-            entity_category=desc.entity_category,
-            mode=desc.mode or NumberMode.BOX,
-            native_step=1,
-            registry=profile.registry[desc.register_key],
+    descriptions: list[SystemairNumberEntityDescription] = []
+    for desc in profile.entities.numbers:
+        registry = resolve_profile_entity_register(profile, desc, "number")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairNumberEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                native_unit_of_measurement=desc.native_unit_of_measurement,
+                entity_category=desc.entity_category,
+                mode=desc.mode or NumberMode.BOX,
+                native_step=1,
+                registry=registry,
+            )
         )
-        for desc in profile.entities.numbers
-    )
+    return tuple(descriptions)
 
 
 async def async_setup_entry(

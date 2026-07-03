@@ -318,8 +318,12 @@ class SystemairD24810ClimateEntity(SystemairEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Map HVAC mode changes to the D24810 fan mode register."""
-        fan_mode = FAN_OFF if hvac_mode == HVACMode.OFF else FAN_LOW
-        await self.async_set_fan_mode(fan_mode)
+        if hvac_mode == HVACMode.OFF:
+            await self.async_set_fan_mode(FAN_OFF)
+            return
+
+        if self.fan_mode in (None, FAN_OFF):
+            await self.async_set_fan_mode(FAN_LOW)
 
     @property
     def current_temperature(self) -> float | None:

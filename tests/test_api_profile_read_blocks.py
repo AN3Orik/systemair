@@ -51,6 +51,34 @@ class ApiProfileReadBlocksTest(unittest.IsolatedAsyncioTestCase):
         assert client.alarm_history_blocks == ()  # noqa: S101
         assert client.test_register == CUSTOM_TEST_REGISTER  # noqa: S101
 
+    def test_clients_respect_empty_blocks_and_zero_test_register_overrides(self) -> None:
+        """Explicit profile overrides are not replaced by SAVE defaults when falsy."""
+        clients = (
+            SystemairModbusClient(
+                host="127.0.0.1",
+                port=502,
+                slave_id=1,
+                read_blocks=(),
+                alarm_detail_blocks=(),
+                alarm_history_blocks=(),
+                test_register=0,
+            ),
+            SystemairSerialClient(
+                port="COM1",
+                read_blocks=(),
+                alarm_detail_blocks=(),
+                alarm_history_blocks=(),
+                test_register=0,
+            ),
+        )
+
+        for client in clients:
+            with self.subTest(client=type(client).__name__):
+                assert client.read_blocks == ()  # noqa: S101
+                assert client.alarm_detail_blocks == ()  # noqa: S101
+                assert client.alarm_history_blocks == ()  # noqa: S101
+                assert client.test_register == 0  # noqa: S101
+
     async def test_modbus_client_read_registers_uses_one_based_addresses(self) -> None:
         """Modbus TCP read_registers converts one-based profile addresses to zero-based transport offsets."""
         client = SystemairModbusClient(host="127.0.0.1", port=502, slave_id=1)

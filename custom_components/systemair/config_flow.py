@@ -73,6 +73,10 @@ PROFILE_LABELS = {
 }
 
 
+class ProfileAutoDetectionFailedError(ModbusConnectionError):
+    """Raised when profile auto-detection cannot choose a profile safely."""
+
+
 def _profile_options_for_api_type(api_type: str) -> tuple[str, ...]:
     """Return profile choices supported by a connection mode."""
     if api_type in (API_TYPE_MODBUS_TCP, API_TYPE_MODBUS_SERIAL):
@@ -166,7 +170,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 outcome = await async_detect_profile(client)
             except ProfileDetectionError as err:
                 msg = "cannot_auto_detect_profile"
-                raise ModbusConnectionError(msg) from err
+                raise ProfileAutoDetectionFailedError(msg) from err
             finally:
                 await client.stop()
 
@@ -195,7 +199,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 outcome = await async_detect_profile(client)
             except ProfileDetectionError as err:
                 msg = "cannot_auto_detect_profile"
-                raise ModbusConnectionError(msg) from err
+                raise ProfileAutoDetectionFailedError(msg) from err
             finally:
                 await client.stop()
 
@@ -338,9 +342,12 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_modbus_tcp_connection(user_input)
+            except ProfileAutoDetectionFailedError as e:
+                LOGGER.error("Failed to auto-detect Systemair profile: %s", e)
+                errors["base"] = "cannot_auto_detect_profile"
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit: %s", e)
-                errors["base"] = "cannot_auto_detect_profile" if str(e) == "cannot_auto_detect_profile" else "cannot_connect"
+                errors["base"] = "cannot_connect"
             except (TimeoutError, OSError) as e:
                 LOGGER.exception("Unexpected exception: %s", e)
                 errors["base"] = "unknown"
@@ -385,9 +392,12 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_serial_connection(user_input)
+            except ProfileAutoDetectionFailedError as e:
+                LOGGER.error("Failed to auto-detect Systemair profile via Serial: %s", e)
+                errors["base"] = "cannot_auto_detect_profile"
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit via Serial: %s", e)
-                errors["base"] = "cannot_auto_detect_profile" if str(e) == "cannot_auto_detect_profile" else "cannot_connect"
+                errors["base"] = "cannot_connect"
             except (TimeoutError, OSError) as e:
                 LOGGER.exception("Unexpected exception: %s", e)
                 errors["base"] = "unknown"
@@ -398,17 +408,11 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_SERIAL
 
-                # Convert display values to serial library constants
-                user_input[CONF_BAUDRATE] = int(user_input[CONF_BAUDRATE])
-
-                if user_input[CONF_BYTESIZE] in SERIAL_BYTESIZES:
-                    user_input[CONF_BYTESIZE] = SERIAL_BYTESIZES[user_input[CONF_BYTESIZE]]
-
-                if user_input[CONF_PARITY] in SERIAL_PARITIES:
-                    user_input[CONF_PARITY] = SERIAL_PARITIES[user_input[CONF_PARITY]]
-
-                if user_input[CONF_STOPBITS] in SERIAL_STOPBITS:
-                    user_input[CONF_STOPBITS] = SERIAL_STOPBITS[user_input[CONF_STOPBITS]]
+                serial_kwargs = _serial_client_kwargs_from_input(user_input)
+                user_input[CONF_BAUDRATE] = serial_kwargs["baudrate"]
+                user_input[CONF_BYTESIZE] = serial_kwargs["bytesize"]
+                user_input[CONF_PARITY] = serial_kwargs["parity"]
+                user_input[CONF_STOPBITS] = serial_kwargs["stopbits"]
 
                 return self.async_create_entry(
                     title=user_input.get(CONF_MODEL, f"Serial {user_input[CONF_SERIAL_PORT]}"),

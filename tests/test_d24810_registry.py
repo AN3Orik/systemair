@@ -7,7 +7,7 @@ import unittest
 from custom_components.systemair.const import API_TYPE_MODBUS_SERIAL, API_TYPE_MODBUS_TCP
 from custom_components.systemair.modbus import RegisterType
 from custom_components.systemair.profiles import DEVICE_PROFILE_LEGACY_D24810, get_device_profile
-from custom_components.systemair.profiles.d24810 import D24810_PROFILE, d24810_parameter_map
+from custom_components.systemair.profiles.d24810 import D24810_PARAMETERS, D24810_PROFILE, d24810_parameter_map
 
 D24810_PROBE_REGISTERS = {
     "REG_FAN_SPEED_LEVEL": 101,
@@ -77,3 +77,8 @@ class D24810RegistryTest(unittest.TestCase):
         """Each register address maps to exactly one D24810 parameter."""
         addresses = [param.register for param in d24810_parameter_map.values()]
         assert len(addresses) == len(set(addresses))  # noqa: S101
+
+    def test_registry_has_no_duplicate_short_names(self) -> None:
+        """Each D24810 short name maps to exactly one parameter."""
+        short_names = [param.short for param in D24810_PARAMETERS]
+        assert len(short_names) == len(set(short_names))  # noqa: S101

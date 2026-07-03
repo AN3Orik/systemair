@@ -33,6 +33,7 @@ from .modbus import (
     parameter_map,
 )
 from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
@@ -415,19 +416,24 @@ def _profile_sensor_descriptions(profile: DeviceProfile) -> tuple[SystemairSenso
     if profile.profile_id == DEVICE_PROFILE_SAVE:
         return ENTITY_DESCRIPTIONS
 
-    return tuple(
-        SystemairSensorEntityDescription(
-            key=desc.key,
-            translation_key=desc.translation_key,
-            device_class=desc.device_class,
-            state_class=desc.state_class,
-            native_unit_of_measurement=desc.native_unit_of_measurement,
-            entity_category=desc.entity_category,
-            icon=desc.icon,
-            registry=profile.registry[desc.register_key],
+    descriptions: list[SystemairSensorEntityDescription] = []
+    for desc in profile.entities.sensors:
+        registry = resolve_profile_entity_register(profile, desc, "sensor")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairSensorEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                device_class=desc.device_class,
+                state_class=desc.state_class,
+                native_unit_of_measurement=desc.native_unit_of_measurement,
+                entity_category=desc.entity_category,
+                icon=desc.icon,
+                registry=registry,
+            )
         )
-        for desc in profile.entities.sensors
-    )
+    return tuple(descriptions)
 
 
 async def async_setup_entry(

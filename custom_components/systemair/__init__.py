@@ -35,6 +35,7 @@ from .const import (
     CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
+    LOGGER,
 )
 from .coordinator import SystemairDataUpdateCoordinator
 from .data import SystemairConfigEntry, SystemairData
@@ -72,8 +73,19 @@ def _profile_supports_api_type(profile: DeviceProfile, api_type: str) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) -> bool:
     """Set up this integration using UI."""
     api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)
-    profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+    try:
+        profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+    except ValueError as err:
+        LOGGER.error("Unable to set up Systemair entry %s: %s", entry.entry_id, err)
+        return False
+
     if not _profile_supports_api_type(profile, api_type):
+        LOGGER.error(
+            "Systemair profile %s does not support connection mode %s for entry %s",
+            profile.profile_id,
+            api_type,
+            entry.entry_id,
+        )
         return False
 
     if api_type == API_TYPE_MODBUS_WEBAPI:
@@ -158,8 +170,15 @@ async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
-    profile = getattr(entry.runtime_data, "profile", get_device_profile(entry.data.get(CONF_DEVICE_PROFILE)))
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, _profile_platforms(profile))
+    profile = getattr(entry.runtime_data, "profile", None)
+    if profile is None:
+        try:
+            profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+        except ValueError as err:
+            LOGGER.warning("Unable to resolve Systemair profile while unloading entry %s: %s", entry.entry_id, err)
+
+    unload_platforms = _profile_platforms(profile) if profile is not None else PLATFORMS
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, unload_platforms)
 
     if unload_ok:
         api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)

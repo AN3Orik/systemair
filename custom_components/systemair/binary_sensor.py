@@ -14,6 +14,7 @@ from homeassistant.components.binary_sensor import (
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -160,16 +161,21 @@ def _profile_binary_sensor_descriptions(profile: DeviceProfile) -> tuple[Systema
     if profile.profile_id == DEVICE_PROFILE_SAVE:
         return ENTITY_DESCRIPTIONS
 
-    return tuple(
-        SystemairBinarySensorEntityDescription(
-            key=desc.key,
-            translation_key=desc.translation_key,
-            device_class=desc.device_class,
-            entity_category=desc.entity_category,
-            registry=profile.registry[desc.register_key],
+    descriptions: list[SystemairBinarySensorEntityDescription] = []
+    for desc in profile.entities.binary_sensors:
+        registry = resolve_profile_entity_register(profile, desc, "binary_sensor")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairBinarySensorEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                device_class=desc.device_class,
+                entity_category=desc.entity_category,
+                registry=registry,
+            )
         )
-        for desc in profile.entities.binary_sensors
-    )
+    return tuple(descriptions)
 
 
 async def async_setup_entry(

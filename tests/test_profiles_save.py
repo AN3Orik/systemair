@@ -36,3 +36,16 @@ class SaveProfileTest(unittest.TestCase):
         """Missing profile ids and explicit SAVE ids resolve to SAVE."""
         assert get_device_profile(DEVICE_PROFILE_SAVE) is SAVE_PROFILE  # noqa: S101
         assert get_device_profile(None) is SAVE_PROFILE  # noqa: S101
+
+    def test_profile_registry_is_immutable(self) -> None:
+        """Runtime profile maps cannot be mutated in place by consumers."""
+        test_key = "__test_mutation__"
+        try:
+            try:
+                SAVE_PROFILE.registry[test_key] = SAVE_PROFILE.registry["REG_TC_SP"]
+            except TypeError:
+                return
+            self.fail("TypeError was not raised")
+        finally:
+            if isinstance(SAVE_PROFILE.registry, dict):
+                SAVE_PROFILE.registry.pop(test_key, None)

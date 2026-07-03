@@ -30,3 +30,11 @@ class ProfileResolutionTest(unittest.TestCase):
         profile = get_device_profile(entry_data.get(CONF_DEVICE_PROFILE))
 
         assert profile.profile_id == DEVICE_PROFILE_SAVE  # noqa: S101
+
+    def test_unknown_profile_id_raises_clear_error(self) -> None:
+        """Malformed profile ids must not silently fall back to a different register map."""
+        try:
+            get_device_profile("stale_profile")
+        except ValueError:
+            return
+        self.fail("ValueError was not raised")

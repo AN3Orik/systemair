@@ -61,13 +61,14 @@ def _score_save(values: dict[int, int]) -> int:
 
 
 def _score_d24810(values: dict[int, int]) -> int:
-    score = 0
+    if not _value_in(values, 501, D24810_SYSTEM_TYPES):
+        return 0
+
+    score = 2
     if _value_between(values, 101, 0, 4):
         score += 1
     if _value_in(values, 108, {0, 1}):
         score += 1
-    if _value_in(values, 501, D24810_SYSTEM_TYPES):
-        score += 2
     if _value_between(values, 601, 1, 24):
         score += 1
     if _value_between(values, 602, 0, 3650):

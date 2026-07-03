@@ -7,7 +7,15 @@ import unittest
 from custom_components.systemair.binary_sensor import _profile_binary_sensor_descriptions
 from custom_components.systemair.modbus import parameter_map
 from custom_components.systemair.number import NUMBERS, _profile_number_descriptions
+from custom_components.systemair.profiles.base import DeviceProfile, ProfileEntityDescriptions
 from custom_components.systemair.profiles.d24810 import D24810_PROFILE, d24810_parameter_map
+from custom_components.systemair.profiles.entities import (
+    BinarySensorProfileEntity,
+    NumberProfileEntity,
+    SelectProfileEntity,
+    SensorProfileEntity,
+    SwitchProfileEntity,
+)
 from custom_components.systemair.profiles.save import SAVE_PROFILE
 from custom_components.systemair.select import ENTITY_DESCRIPTIONS as SELECT_DESCRIPTIONS
 from custom_components.systemair.select import _profile_select_descriptions
@@ -73,3 +81,29 @@ class ProfileEntityBoundariesTest(unittest.TestCase):
         assert select_registers == {"REG_FAN_SPEED_LEVEL"}  # noqa: S101
         assert switch_registers == set()  # noqa: S101
         assert number_registers == {"REG_FILTER_PER"}  # noqa: S101
+
+    def test_missing_profile_entity_registers_are_skipped(self) -> None:
+        """A bad profile entity reference does not crash platform setup."""
+        profile = DeviceProfile(
+            profile_id="broken",
+            name="Broken",
+            supported_api_types=(),
+            supported_platforms=(),
+            registry={},
+            read_blocks=(),
+            test_register=1,
+            entities=ProfileEntityDescriptions(
+                sensors=(SensorProfileEntity(key="sensor", register_key="MISSING"),),
+                binary_sensors=(BinarySensorProfileEntity(key="binary_sensor", register_key="MISSING"),),
+                switches=(SwitchProfileEntity(key="switch", register_key="MISSING"),),
+                selects=(SelectProfileEntity(key="select", register_key="MISSING", options_map={0: "off"}),),
+                numbers=(NumberProfileEntity(key="number", register_key="MISSING"),),
+            ),
+        )
+
+        with self.assertLogs("custom_components.systemair", level="WARNING"):
+            assert _profile_sensor_descriptions(profile) == ()  # noqa: S101
+            assert _profile_binary_sensor_descriptions(profile) == ()  # noqa: S101
+            assert _profile_switch_descriptions(profile) == ()  # noqa: S101
+            assert _profile_select_descriptions(profile) == ()  # noqa: S101
+            assert _profile_number_descriptions(profile) == ()  # noqa: S101

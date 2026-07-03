@@ -58,6 +58,17 @@ class ProfileDetectionTest(unittest.TestCase):
             return
         self.fail("ProfileDetectionError was not raised")
 
+    def test_d24810_requires_valid_system_type_probe(self) -> None:
+        """Generic D24810-looking values are not enough without REG_SYSTEM_TYPE."""
+        try:
+            detect_profile_from_probe_values(
+                save_values={1131: 99, 1161: 99, 1274: 99, 2001: 9999},
+                d24810_values={101: 1, 108: 1, 501: 99, 601: 12, 602: 30},
+            )
+        except ProfileDetectionError:
+            return
+        self.fail("ProfileDetectionError was not raised")
+
     def test_outcome_records_scores(self) -> None:
         """Detection outcome exposes the scores used for diagnostics."""
         outcome = DetectionOutcome(profile_id=DEVICE_PROFILE_SAVE, save_score=EXPECTED_SAVE_SCORE, d24810_score=0)
