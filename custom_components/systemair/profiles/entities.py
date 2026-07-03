@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from custom_components.systemair.const import LOGGER
 
 if TYPE_CHECKING:
     from custom_components.systemair.modbus import ModbusParameter
     from custom_components.systemair.profiles.base import DeviceProfile
+
+
+class ProfileEntityRef(Protocol):
+    """Common profile entity fields needed for register resolution."""
+
+    key: str
+    register_key: str
 
 
 @dataclass(frozen=True)
@@ -72,7 +79,7 @@ class NumberProfileEntity:
     mode: str | None = None
 
 
-def resolve_profile_entity_register(profile: DeviceProfile, desc: Any, platform: str) -> ModbusParameter | None:
+def resolve_profile_entity_register(profile: DeviceProfile, desc: ProfileEntityRef, platform: str) -> ModbusParameter | None:
     """Return a profile entity register, or skip stale metadata safely."""
     register = profile.registry.get(desc.register_key)
     if register is None:
