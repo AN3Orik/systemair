@@ -1,0 +1,30 @@
+"""Device profile registry."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from custom_components.systemair.profiles.save import SAVE_PROFILE
+
+if TYPE_CHECKING:
+    from custom_components.systemair.profiles.base import DeviceProfile
+
+DEVICE_PROFILE_AUTO = "auto"
+DEVICE_PROFILE_SAVE = "save"
+DEVICE_PROFILE_LEGACY_D24810 = "legacy_d24810"
+
+_PROFILES: dict[str, DeviceProfile] = {
+    DEVICE_PROFILE_SAVE: SAVE_PROFILE,
+}
+
+
+def get_device_profile(profile_id: str | None) -> DeviceProfile:
+    """Return a device profile, defaulting old entries to SAVE."""
+    if profile_id in (None, ""):
+        return SAVE_PROFILE
+    return _PROFILES[profile_id]
+
+
+def iter_device_profiles() -> tuple[DeviceProfile, ...]:
+    """Return all registered concrete device profiles."""
+    return tuple(_PROFILES.values())
