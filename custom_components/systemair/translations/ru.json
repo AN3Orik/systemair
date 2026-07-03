@@ -316,6 +316,12 @@
             "meter_eaf_reg_speed": {
                 "name": "Скорость вентилятора вытяжного воздуха"
             },
+            "d24810_system_type": {
+                "name": "Тип системы"
+            },
+            "filter_days": {
+                "name": "Дней после замены фильтра"
+            },
             "heater_output_value": {
                 "name": "Мощность нагревателя"
             },
@@ -450,6 +456,16 @@
             }
         },
         "select": {
+            "fan_speed_level": {
+                "name": "Уровень скорости вентилятора",
+                "state": {
+                    "off": "Выкл.",
+                    "low": "Низкая",
+                    "normal": "Нормальная",
+                    "high": "Высокая",
+                    "auto": "Авто"
+                }
+            },
             "temperature_control_mode": {
                 "name": "Режим контроля температуры",
                 "state": {
