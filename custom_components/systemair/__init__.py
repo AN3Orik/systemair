@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .profiles.base import DeviceProfile
+
 
 PLATFORMS: list[Platform] = [
     Platform.BUTTON,
@@ -55,6 +57,11 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
     Platform.SELECT,
 ]
+
+
+def _profile_platforms(profile: DeviceProfile) -> list[Platform]:
+    """Return Home Assistant platforms supported by a profile."""
+    return list(profile.supported_platforms)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) -> bool:
@@ -132,7 +139,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
 
     entry.async_on_unload(entry.add_update_listener(async_options_update_listener))
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, _profile_platforms(profile))
 
     return True
 
@@ -144,7 +151,8 @@ async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    profile = getattr(entry.runtime_data, "profile", get_device_profile(entry.data.get(CONF_DEVICE_PROFILE)))
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, _profile_platforms(profile))
 
     if unload_ok:
         api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)
