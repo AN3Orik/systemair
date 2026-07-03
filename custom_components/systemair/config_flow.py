@@ -30,6 +30,7 @@ from .const import (
     CONF_BAUDRATE,
     CONF_BYTESIZE,
     CONF_DEVICE_ID,
+    CONF_DEVICE_PROFILE,
     CONF_ENABLE_ALARM_DETAILS,
     CONF_ENABLE_ALARM_HISTORY,
     CONF_MODEL,
@@ -56,6 +57,83 @@ from .const import (
     SERIAL_PARITIES,
     SERIAL_STOPBITS,
 )
+from .profiles import (
+    DEVICE_PROFILE_AUTO,
+    DEVICE_PROFILE_LEGACY_D24810,
+    DEVICE_PROFILE_SAVE,
+    get_device_profile,
+    iter_device_profiles,
+)
+from .profiles.detection import ProfileDetectionError, async_detect_profile
+
+PROFILE_LABELS = {
+    DEVICE_PROFILE_AUTO: "Auto",
+    DEVICE_PROFILE_SAVE: "SAVE",
+    DEVICE_PROFILE_LEGACY_D24810: "Legacy Residential / D24810",
+}
+
+
+class ProfileAutoDetectionFailedError(ModbusConnectionError):
+    """Raised when profile auto-detection cannot choose a profile safely."""
+
+
+def _profile_options_for_api_type(api_type: str) -> tuple[str, ...]:
+    """Return profile choices supported by a connection mode."""
+    if api_type in (API_TYPE_MODBUS_TCP, API_TYPE_MODBUS_SERIAL):
+        return (DEVICE_PROFILE_AUTO, DEVICE_PROFILE_SAVE, DEVICE_PROFILE_LEGACY_D24810)
+    return (DEVICE_PROFILE_SAVE,)
+
+
+def _profile_selector_options(api_type: str) -> list[selector.SelectOptionDict]:
+    """Return labeled profile options for Home Assistant selectors."""
+    return [
+        selector.SelectOptionDict(value=profile_id, label=PROFILE_LABELS[profile_id])
+        for profile_id in _profile_options_for_api_type(api_type)
+    ]
+
+
+def _modbus_model_options() -> list[str]:
+    """Return model choices for all concrete Modbus profiles."""
+    options = dict.fromkeys(MODEL_SPECS)
+    for profile in iter_device_profiles():
+        for model in profile.model_options:
+            options.setdefault(model, None)
+    return list(options)
+
+
+def _profile_client_kwargs(profile_id: str) -> dict[str, Any]:
+    """Return client register settings for a concrete profile."""
+    profile = get_device_profile(profile_id)
+    return {
+        "read_blocks": profile.read_blocks,
+        "alarm_detail_blocks": profile.alarm_detail_blocks,
+        "alarm_history_blocks": profile.alarm_history_blocks,
+        "test_register": profile.test_register,
+    }
+
+
+def _serial_client_kwargs_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Return normalized serial client options from config flow input."""
+    bytesize = user_input[CONF_BYTESIZE]
+    if bytesize in SERIAL_BYTESIZES:
+        bytesize = SERIAL_BYTESIZES[bytesize]
+
+    parity = user_input[CONF_PARITY]
+    if parity in SERIAL_PARITIES:
+        parity = SERIAL_PARITIES[parity]
+
+    stopbits = user_input[CONF_STOPBITS]
+    if stopbits in SERIAL_STOPBITS:
+        stopbits = SERIAL_STOPBITS[stopbits]
+
+    return {
+        "port": user_input[CONF_SERIAL_PORT],
+        "baudrate": int(user_input[CONF_BAUDRATE]),
+        "bytesize": bytesize,
+        "parity": parity,
+        "stopbits": stopbits,
+        "slave_id": user_input[CONF_SLAVE_ID],
+    }
 
 
 class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -80,10 +158,30 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_modbus_tcp_connection(self, user_input: dict) -> None:
         """Validate the connection to the unit via Modbus TCP."""
+        profile_id = user_input.get(CONF_DEVICE_PROFILE, DEVICE_PROFILE_SAVE)
+        if profile_id == DEVICE_PROFILE_AUTO:
+            client = SystemairModbusClient(
+                host=user_input[CONF_HOST],
+                port=user_input[CONF_PORT],
+                slave_id=user_input[CONF_SLAVE_ID],
+            )
+            try:
+                await client.start()
+                outcome = await async_detect_profile(client)
+            except ProfileDetectionError as err:
+                msg = "cannot_auto_detect_profile"
+                raise ProfileAutoDetectionFailedError(msg) from err
+            finally:
+                await client.stop()
+
+            user_input[CONF_DEVICE_PROFILE] = outcome.profile_id
+            return
+
         client = SystemairModbusClient(
             host=user_input[CONF_HOST],
             port=user_input[CONF_PORT],
             slave_id=user_input[CONF_SLAVE_ID],
+            **_profile_client_kwargs(profile_id),
         )
         if not await client.test_connection():
             msg = "Failed to connect"
@@ -91,27 +189,26 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_serial_connection(self, user_input: dict) -> None:
         """Validate the connection to the unit via Modbus Serial."""
-        baudrate = int(user_input[CONF_BAUDRATE])
+        serial_kwargs = _serial_client_kwargs_from_input(user_input)
+        profile_id = user_input.get(CONF_DEVICE_PROFILE, DEVICE_PROFILE_SAVE)
 
-        bytesize = user_input[CONF_BYTESIZE]
-        if bytesize in SERIAL_BYTESIZES:
-            bytesize = SERIAL_BYTESIZES[bytesize]
+        if profile_id == DEVICE_PROFILE_AUTO:
+            client = SystemairSerialClient(**serial_kwargs)
+            try:
+                await client.start()
+                outcome = await async_detect_profile(client)
+            except ProfileDetectionError as err:
+                msg = "cannot_auto_detect_profile"
+                raise ProfileAutoDetectionFailedError(msg) from err
+            finally:
+                await client.stop()
 
-        parity = user_input[CONF_PARITY]
-        if parity in SERIAL_PARITIES:
-            parity = SERIAL_PARITIES[parity]
-
-        stopbits = user_input[CONF_STOPBITS]
-        if stopbits in SERIAL_STOPBITS:
-            stopbits = SERIAL_STOPBITS[stopbits]
+            user_input[CONF_DEVICE_PROFILE] = outcome.profile_id
+            return
 
         client = SystemairSerialClient(
-            port=user_input[CONF_SERIAL_PORT],
-            baudrate=baudrate,
-            bytesize=bytesize,
-            parity=parity,
-            stopbits=stopbits,
-            slave_id=user_input[CONF_SLAVE_ID],
+            **serial_kwargs,
+            **_profile_client_kwargs(profile_id),
         )
         try:
             await client.start()
@@ -245,6 +342,9 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_modbus_tcp_connection(user_input)
+            except ProfileAutoDetectionFailedError as e:
+                LOGGER.error("Failed to auto-detect Systemair profile: %s", e)
+                errors["base"] = "cannot_auto_detect_profile"
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit: %s", e)
                 errors["base"] = "cannot_connect"
@@ -269,9 +369,15 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_HOST): selector.TextSelector(),
                     vol.Required(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
                     vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
+                    vol.Required(CONF_DEVICE_PROFILE, default=DEVICE_PROFILE_AUTO): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=_profile_selector_options(API_TYPE_MODBUS_TCP),
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Required(CONF_MODEL, default=next(iter(MODEL_SPECS))): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=list(MODEL_SPECS.keys()),
+                            options=_modbus_model_options(),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
@@ -286,6 +392,9 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await self._validate_serial_connection(user_input)
+            except ProfileAutoDetectionFailedError as e:
+                LOGGER.error("Failed to auto-detect Systemair profile via Serial: %s", e)
+                errors["base"] = "cannot_auto_detect_profile"
             except ModbusConnectionError as e:
                 LOGGER.error("Failed to connect to VSR unit via Serial: %s", e)
                 errors["base"] = "cannot_connect"
@@ -299,17 +408,11 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 user_input[CONF_API_TYPE] = API_TYPE_MODBUS_SERIAL
 
-                # Convert display values to serial library constants
-                user_input[CONF_BAUDRATE] = int(user_input[CONF_BAUDRATE])
-
-                if user_input[CONF_BYTESIZE] in SERIAL_BYTESIZES:
-                    user_input[CONF_BYTESIZE] = SERIAL_BYTESIZES[user_input[CONF_BYTESIZE]]
-
-                if user_input[CONF_PARITY] in SERIAL_PARITIES:
-                    user_input[CONF_PARITY] = SERIAL_PARITIES[user_input[CONF_PARITY]]
-
-                if user_input[CONF_STOPBITS] in SERIAL_STOPBITS:
-                    user_input[CONF_STOPBITS] = SERIAL_STOPBITS[user_input[CONF_STOPBITS]]
+                serial_kwargs = _serial_client_kwargs_from_input(user_input)
+                user_input[CONF_BAUDRATE] = serial_kwargs["baudrate"]
+                user_input[CONF_BYTESIZE] = serial_kwargs["bytesize"]
+                user_input[CONF_PARITY] = serial_kwargs["parity"]
+                user_input[CONF_STOPBITS] = serial_kwargs["stopbits"]
 
                 return self.async_create_entry(
                     title=user_input.get(CONF_MODEL, f"Serial {user_input[CONF_SERIAL_PORT]}"),
@@ -346,9 +449,15 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                     ),
                     vol.Required(CONF_SLAVE_ID, default=DEFAULT_SLAVE_ID): vol.Coerce(int),
+                    vol.Required(CONF_DEVICE_PROFILE, default=DEVICE_PROFILE_AUTO): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=_profile_selector_options(API_TYPE_MODBUS_SERIAL),
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                     vol.Required(CONF_MODEL, default=next(iter(MODEL_SPECS))): selector.SelectSelector(
                         selector.SelectSelectorConfig(
-                            options=list(MODEL_SPECS.keys()),
+                            options=_modbus_model_options(),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
@@ -398,6 +507,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self._abort_if_unique_id_configured()
 
                         user_input[CONF_API_TYPE] = API_TYPE_MODBUS_WEBAPI
+                        user_input[CONF_DEVICE_PROFILE] = DEVICE_PROFILE_SAVE
 
                         # Use device model if user didn't select one manually
                         if CONF_MODEL not in user_input or not user_input[CONF_MODEL]:
@@ -542,6 +652,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data = {
                     **self._homesolution_creds,
                     CONF_API_TYPE: API_TYPE_HOMESOLUTION,
+                    CONF_DEVICE_PROFILE: DEVICE_PROFILE_SAVE,
                     CONF_DEVICE_ID: device_id,
                 }
 
@@ -593,6 +704,8 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
 
         default_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
         api_type = self.config_entry.data.get(CONF_API_TYPE)
+        profile = get_device_profile(self.config_entry.data.get(CONF_DEVICE_PROFILE))
+        model_options = list(dict.fromkeys((*profile.model_options, default_model)))
 
         # Get current update interval & alarm options
         # WebAPI (SAVECONNECT 2.0) has these disabled by default to prevent hangs
@@ -605,7 +718,7 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
         schema_dict = {
             vol.Required(CONF_MODEL, default=default_model): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=list(MODEL_SPECS.keys()),
+                    options=model_options,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),

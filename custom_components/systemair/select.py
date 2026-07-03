@@ -13,6 +13,8 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, parameter_map
+from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
 
     from .coordinator import SystemairDataUpdateCoordinator
     from .data import SystemairConfigEntry
+    from .profiles.base import DeviceProfile
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -96,6 +99,29 @@ ENTITY_DESCRIPTIONS = (
 )
 
 
+def _profile_select_descriptions(profile: DeviceProfile) -> tuple[SystemairSelectEntityDescription, ...]:
+    """Return select descriptions for the active device profile."""
+    if profile.profile_id == DEVICE_PROFILE_SAVE:
+        return ENTITY_DESCRIPTIONS
+
+    descriptions: list[SystemairSelectEntityDescription] = []
+    for desc in profile.entities.selects:
+        registry = resolve_profile_entity_register(profile, desc, "select")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairSelectEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                icon=desc.icon,
+                entity_category=desc.entity_category,
+                registry=registry,
+                options_map=desc.options_map,
+            )
+        )
+    return tuple(descriptions)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
     entry: SystemairConfigEntry,
@@ -107,7 +133,7 @@ async def async_setup_entry(
             coordinator=entry.runtime_data.coordinator,
             entity_description=entity_description,
         )
-        for entity_description in ENTITY_DESCRIPTIONS
+        for entity_description in _profile_select_descriptions(entry.runtime_data.profile)
     )
 
 

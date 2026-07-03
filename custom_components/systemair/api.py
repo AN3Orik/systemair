@@ -14,7 +14,9 @@ from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
 from .const import LOGGER
-from .modbus import ModbusParameter, parameter_map
+from .modbus import ModbusParameter
+from .profiles.base import ReadBlock
+from .profiles.save import SAVE_PROFILE
 
 __all__ = [
     "ModbusConnectionError",
@@ -45,48 +47,9 @@ WEB_API_MAX_REGISTERS_PER_REQUEST = 70
 # transient-tolerance before the user is prompted.
 AUTH_FAILURE_THRESHOLD = 20
 
-READ_BLOCKS_BASE = [
-    (1001, 62),
-    (1101, 88),
-    (1201, 74),
-    (1351, 3),
-    (1410, 10),
-    (2001, 125),
-    (2126, 24),
-    (2201, 63),
-    (2311, 8),
-    (2401, 53),
-    (2504, 18),
-    (3002, 116),
-    (4001, 12),
-    (4101, 20),
-    (7001, 6),
-    (12011, 2),
-    (12101, 41),
-    (12301, 17),
-    (12401, 5),
-    (12544, 1),
-    (14001, 4),
-    (14101, 5),
-    (14201, 4),
-    (14301, 11),
-    (14381, 1),
-    (15901, 10),
-]
-
-READ_BLOCKS_ALARM_DETAILS = [
-    (15016, 125),
-    (15141, 125),
-    (15266, 125),
-    (15391, 125),
-    (15516, 125),
-]
-
-READ_BLOCKS_ALARM_HISTORY = [
-    (15641, 125),
-    (15766, 125),
-    (15891, 10),
-]
+READ_BLOCKS_BASE = list(SAVE_PROFILE.read_blocks)
+READ_BLOCKS_ALARM_DETAILS = list(SAVE_PROFILE.alarm_detail_blocks)
+READ_BLOCKS_ALARM_HISTORY = list(SAVE_PROFILE.alarm_history_blocks)
 
 
 class ModbusConnectionError(Exception):
@@ -144,15 +107,48 @@ class SystemairClientBase(ABC):
         """Get all data from device."""
 
 
+def _resolve_profile_defaults(
+    *,
+    read_blocks: tuple[ReadBlock, ...] | None,
+    alarm_detail_blocks: tuple[ReadBlock, ...] | None,
+    alarm_history_blocks: tuple[ReadBlock, ...] | None,
+    test_register: int | None,
+) -> tuple[tuple[ReadBlock, ...], tuple[ReadBlock, ...], tuple[ReadBlock, ...], int]:
+    """Resolve optional profile settings without treating explicit falsy overrides as missing."""
+    return (
+        read_blocks if read_blocks is not None else SAVE_PROFILE.read_blocks,
+        alarm_detail_blocks if alarm_detail_blocks is not None else SAVE_PROFILE.alarm_detail_blocks,
+        alarm_history_blocks if alarm_history_blocks is not None else SAVE_PROFILE.alarm_history_blocks,
+        test_register if test_register is not None else SAVE_PROFILE.test_register,
+    )
+
+
 class SystemairModbusClient(SystemairClientBase):
     """Provides a client for interacting with a Systemair unit via Modbus TCP."""
 
-    def __init__(self, host: str, port: int, slave_id: int, timeout: int = 5) -> None:
+    def __init__(  # noqa: PLR0913
+        self,
+        host: str,
+        port: int,
+        slave_id: int,
+        timeout: int = 5,
+        *,
+        read_blocks: tuple[tuple[int, int], ...] | None = None,
+        alarm_detail_blocks: tuple[tuple[int, int], ...] | None = None,
+        alarm_history_blocks: tuple[tuple[int, int], ...] | None = None,
+        test_register: int | None = None,
+    ) -> None:
         """Initialize the Modbus client."""
         self._host = host
         self._port = port
         self._timeout = timeout
         self.slave_id = slave_id
+        self.read_blocks, self.alarm_detail_blocks, self.alarm_history_blocks, self.test_register = _resolve_profile_defaults(
+            read_blocks=read_blocks,
+            alarm_detail_blocks=alarm_detail_blocks,
+            alarm_history_blocks=alarm_history_blocks,
+            test_register=test_register,
+        )
 
         self._client: AsyncModbusTcpClient | None = None
         self._lock = asyncio.Lock()
@@ -186,8 +182,7 @@ class SystemairModbusClient(SystemairClientBase):
         """Start, test a single read, and stop the client to validate connection."""
         try:
             await self.start()
-            test_register_1based = parameter_map["REG_TC_SP"].register
-            await self._queue_request("read", address=test_register_1based - 1, count=1)
+            await self._queue_request("read", address=self.test_register - 1, count=1)
         except (TimeoutError, ModbusConnectionError) as e:
             LOGGER.error("Failed to connect during test: %s", e)
             return False
@@ -303,6 +298,10 @@ class SystemairModbusClient(SystemairClientBase):
         self._request_queue.put_nowait((request_type, address, future, kwargs))
         return await future
 
+    async def read_registers(self, address_1based: int, count: int = 1) -> list[int]:
+        """Read one-based holding registers."""
+        return await self._queue_request("read", address=address_1based - 1, count=count)
+
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""
         await self._queue_request("write", address=address_1based - 1, value=value)
@@ -321,11 +320,11 @@ class SystemairModbusClient(SystemairClientBase):
         enable_alarm_history: bool = False,
     ) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
-        read_blocks = list(READ_BLOCKS_BASE)
+        read_blocks = list(self.read_blocks)
         if enable_alarm_details:
-            read_blocks.extend(READ_BLOCKS_ALARM_DETAILS)
+            read_blocks.extend(self.alarm_detail_blocks)
         if enable_alarm_history:
-            read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+            read_blocks.extend(self.alarm_history_blocks)
 
         tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in read_blocks]
 
@@ -362,6 +361,11 @@ class SystemairSerialClient(SystemairClientBase):
         parity: str = "N",
         stopbits: int = 1,
         slave_id: int = 1,
+        *,
+        read_blocks: tuple[tuple[int, int], ...] | None = None,
+        alarm_detail_blocks: tuple[tuple[int, int], ...] | None = None,
+        alarm_history_blocks: tuple[tuple[int, int], ...] | None = None,
+        test_register: int | None = None,
     ) -> None:
         """Initialize Modbus Serial client."""
         self._port = port
@@ -370,6 +374,12 @@ class SystemairSerialClient(SystemairClientBase):
         self._parity = parity
         self._stopbits = stopbits
         self._slave_id = slave_id
+        self.read_blocks, self.alarm_detail_blocks, self.alarm_history_blocks, self.test_register = _resolve_profile_defaults(
+            read_blocks=read_blocks,
+            alarm_detail_blocks=alarm_detail_blocks,
+            alarm_history_blocks=alarm_history_blocks,
+            test_register=test_register,
+        )
         self._client: AsyncModbusSerialClient | None = None
         self._lock = asyncio.Lock()
         self._is_running = False
@@ -531,6 +541,10 @@ class SystemairSerialClient(SystemairClientBase):
         self._request_queue.put_nowait((request_type, address, future, kwargs))
         return await future
 
+    async def read_registers(self, address_1based: int, count: int = 1) -> list[int]:
+        """Read one-based holding registers."""
+        return await self._queue_request("read", address=address_1based - 1, count=count)
+
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""
         await self._queue_request("write", address_1based - 1, value=value)
@@ -547,7 +561,7 @@ class SystemairSerialClient(SystemairClientBase):
         try:
             await self._ensure_connection()
             # Try to read a single register to verify communication
-            result = await self._client.read_holding_registers(address=0, count=1, device_id=self._slave_id)
+            result = await self._client.read_holding_registers(address=self.test_register - 1, count=1, device_id=self._slave_id)
             return not result.isError()
         except (ModbusConnectionError, ConnectionException) as e:
             LOGGER.error("Serial connection test failed: %s", e)
@@ -563,11 +577,11 @@ class SystemairSerialClient(SystemairClientBase):
         enable_alarm_history: bool = False,
     ) -> dict[str, Any]:
         """Queue read requests for all required data blocks and assemble the result."""
-        read_blocks = list(READ_BLOCKS_BASE)
+        read_blocks = list(self.read_blocks)
         if enable_alarm_details:
-            read_blocks.extend(READ_BLOCKS_ALARM_DETAILS)
+            read_blocks.extend(self.alarm_detail_blocks)
         if enable_alarm_history:
-            read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+            read_blocks.extend(self.alarm_history_blocks)
 
         tasks = [self._queue_request("read", address=start - 1, count=count) for start, count in read_blocks]
 
@@ -630,6 +644,9 @@ class SystemairWebApiClient(SystemairClientBase):
         self._authenticated = False
         self._defer_auth_errors = defer_auth_errors
         self._consecutive_auth_failures = 0
+        self.read_blocks = SAVE_PROFILE.read_blocks
+        self.alarm_detail_blocks = SAVE_PROFILE.alarm_detail_blocks
+        self.alarm_history_blocks = SAVE_PROFILE.alarm_history_blocks
 
     @property
     def address(self) -> str:
@@ -726,11 +743,11 @@ class SystemairWebApiClient(SystemairClientBase):
     ) -> dict[str, Any]:
         """Get all data from device (compatibility with Modbus TCP client)."""
         async with self._lock:
-            read_blocks = list(READ_BLOCKS_BASE)
+            read_blocks = list(self.read_blocks)
             if enable_alarm_details:
-                read_blocks.extend(READ_BLOCKS_ALARM_DETAILS)
+                read_blocks.extend(self.alarm_detail_blocks)
             if enable_alarm_history:
-                read_blocks.extend(READ_BLOCKS_ALARM_HISTORY)
+                read_blocks.extend(self.alarm_history_blocks)
 
             tasks = []
             for start, count in read_blocks:
@@ -741,7 +758,7 @@ class SystemairWebApiClient(SystemairClientBase):
             # Auth failures from any block must escape — partial-data with a
             # silent reauth-pending state would mask a real problem.
             for result in results:
-                if isinstance(result, (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError)):
+                if isinstance(result, SystemairAuthError | SystemairAuthExpiredError | SystemairAuthRequiredError):
                     raise result
 
             all_registers = {}

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
     from .api import SystemairClientBase
     from .coordinator import SystemairDataUpdateCoordinator
+    from .profiles.base import DeviceProfile
 
 
 type SystemairConfigEntry = ConfigEntry[SystemairData]
@@ -25,6 +26,7 @@ class SystemairData:
     integration: Integration
     model: str
     api_type: str
+    profile: DeviceProfile
 
     iam_sw_version: str | None = None
     mb_hw_version: str | None = None

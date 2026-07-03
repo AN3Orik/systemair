@@ -32,6 +32,8 @@ from .modbus import (
     alarm_parameters,
     parameter_map,
 )
+from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
 
     from .coordinator import SystemairDataUpdateCoordinator
     from .data import SystemairConfigEntry
+    from .profiles.base import DeviceProfile
 
 
 YEAR_2000_THRESHOLD = 100
@@ -408,6 +411,31 @@ ENTITY_DESCRIPTIONS = (
 )
 
 
+def _profile_sensor_descriptions(profile: DeviceProfile) -> tuple[SystemairSensorEntityDescription, ...]:
+    """Return sensor descriptions for the active device profile."""
+    if profile.profile_id == DEVICE_PROFILE_SAVE:
+        return ENTITY_DESCRIPTIONS
+
+    descriptions: list[SystemairSensorEntityDescription] = []
+    for desc in profile.entities.sensors:
+        registry = resolve_profile_entity_register(profile, desc, "sensor")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairSensorEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                device_class=desc.device_class,
+                state_class=desc.state_class,
+                native_unit_of_measurement=desc.native_unit_of_measurement,
+                entity_category=desc.entity_category,
+                icon=desc.icon,
+                registry=registry,
+            )
+        )
+    return tuple(descriptions)
+
+
 async def async_setup_entry(
     _hass: HomeAssistant,
     entry: SystemairConfigEntry,
@@ -415,22 +443,25 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
+    profile = entry.runtime_data.profile
 
-    power_sensors_map = {desc.key: SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS}
+    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in _profile_sensor_descriptions(profile)]
+    entities: list[SensorEntity] = [*sensors]
 
-    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS]
-    power_sensors = list(power_sensors_map.values())
+    if profile.profile_id == DEVICE_PROFILE_SAVE:
+        power_sensors_map = {desc.key: SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS}
+        power_sensors = list(power_sensors_map.values())
+        energy_sensors = [
+            SystemairEnergySensor(
+                coordinator=coordinator,
+                entity_description=desc,
+                power_sensor=power_sensors_map[desc.power_sensor_key],
+            )
+            for desc in ENERGY_SENSORS
+        ]
+        entities.extend([*power_sensors, *energy_sensors])
 
-    energy_sensors = [
-        SystemairEnergySensor(
-            coordinator=coordinator,
-            entity_description=desc,
-            power_sensor=power_sensors_map[desc.power_sensor_key],
-        )
-        for desc in ENERGY_SENSORS
-    ]
-
-    async_add_entities(sensors + power_sensors + energy_sensors)
+    async_add_entities(entities)
 
 
 class SystemairSensor(SystemairEntity, SensorEntity):

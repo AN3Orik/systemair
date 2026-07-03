@@ -15,6 +15,7 @@
                     "host": "IP Address",
                     "port": "Port",
                     "slave_id": "Slave ID",
+                    "device_profile": "Device Profile",
                     "model": "Ventilation Unit Model"
                 }
             },
@@ -28,6 +29,7 @@
                     "parity": "Parity",
                     "stopbits": "Stop Bits",
                     "slave_id": "Slave ID",
+                    "device_profile": "Device Profile",
                     "model": "Ventilation Unit Model"
                 }
             },
@@ -58,6 +60,7 @@
         },
         "error": {
             "cannot_connect": "Unable to connect to the device. Please check the connection details and ensure the device is online.",
+            "cannot_auto_detect_profile": "Unable to auto-detect the device profile safely. Select SAVE or Legacy Residential / D24810 manually.",
             "invalid_auth": "Invalid authentication credentials.",
             "password_required": "This device has a password configured. Please enter it.",
             "password_not_set": "No password is configured on the device. Open the IAM web UI in a browser to create one, then try again.",
@@ -321,6 +324,12 @@
             "meter_eaf_reg_speed": {
                 "name": "Extract air fan speed"
             },
+            "d24810_system_type": {
+                "name": "System type"
+            },
+            "filter_days": {
+                "name": "Filter elapsed days"
+            },
             "heater_output_value": {
                 "name": "Heater output value"
             },
@@ -458,6 +467,16 @@
             }
         },
         "select": {
+            "fan_speed_level": {
+                "name": "Fan speed level",
+                "state": {
+                    "off": "Off",
+                    "low": "Low",
+                    "normal": "Normal",
+                    "high": "High",
+                    "auto": "Auto"
+                }
+            },
             "temperature_control_mode": {
                 "name": "Temperature Control Mode",
                 "state": {

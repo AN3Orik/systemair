@@ -16,6 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 from .const import LOGGER
 from .entity import SystemairEntity
 from .modbus import parameter_map
+from .profiles import DEVICE_PROFILE_SAVE
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -46,6 +47,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the button platform."""
+    if entry.runtime_data.profile.profile_id != DEVICE_PROFILE_SAVE:
+        return
+
     coordinator = entry.runtime_data.coordinator
     async_add_entities(SystemairButton(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS)
 

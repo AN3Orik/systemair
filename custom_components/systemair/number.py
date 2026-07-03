@@ -1,7 +1,10 @@
 """The Systemair integration."""
 
+from __future__ import annotations
+
 import asyncio.exceptions
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.number import (
     NumberDeviceClass,
@@ -16,14 +19,20 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import SystemairDataUpdateCoordinator
-from .data import SystemairConfigEntry
 from .entity import SystemairEntity
 from .modbus import ModbusParameter, parameter_map
+from .profiles import DEVICE_PROFILE_SAVE
+from .profiles.entities import resolve_profile_entity_register
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .coordinator import SystemairDataUpdateCoordinator
+    from .data import SystemairConfigEntry
+    from .profiles.base import DeviceProfile
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -383,6 +392,30 @@ NUMBERS: tuple[SystemairNumberEntityDescription, ...] = (
 )
 
 
+def _profile_number_descriptions(profile: DeviceProfile) -> tuple[SystemairNumberEntityDescription, ...]:
+    """Return number descriptions for the active device profile."""
+    if profile.profile_id == DEVICE_PROFILE_SAVE:
+        return NUMBERS
+
+    descriptions: list[SystemairNumberEntityDescription] = []
+    for desc in profile.entities.numbers:
+        registry = resolve_profile_entity_register(profile, desc, "number")
+        if registry is None:
+            continue
+        descriptions.append(
+            SystemairNumberEntityDescription(
+                key=desc.key,
+                translation_key=desc.translation_key,
+                native_unit_of_measurement=desc.native_unit_of_measurement,
+                entity_category=desc.entity_category,
+                mode=desc.mode or NumberMode.BOX,
+                native_step=1,
+                registry=registry,
+            )
+        )
+    return tuple(descriptions)
+
+
 async def async_setup_entry(
     _hass: HomeAssistant,
     entry: SystemairConfigEntry,
@@ -394,7 +427,7 @@ async def async_setup_entry(
             coordinator=entry.runtime_data.coordinator,
             entity_description=entity_description,
         )
-        for entity_description in NUMBERS
+        for entity_description in _profile_number_descriptions(entry.runtime_data.profile)
     )
 
 

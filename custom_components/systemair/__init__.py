@@ -25,6 +25,7 @@ from .const import (
     CONF_BAUDRATE,
     CONF_BYTESIZE,
     CONF_DEVICE_ID,
+    CONF_DEVICE_PROFILE,
     CONF_MODEL,
     CONF_PARITY,
     CONF_SERIAL_PORT,
@@ -34,14 +35,18 @@ from .const import (
     CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WEB_API_MAX_REGISTERS,
+    LOGGER,
 )
 from .coordinator import SystemairDataUpdateCoordinator
 from .data import SystemairConfigEntry, SystemairData
 from .homesolution import SystemairHomeSolutionClient
+from .profiles import get_device_profile
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+    from .profiles.base import DeviceProfile
 
 
 PLATFORMS: list[Platform] = [
@@ -55,9 +60,33 @@ PLATFORMS: list[Platform] = [
 ]
 
 
+def _profile_platforms(profile: DeviceProfile) -> list[Platform]:
+    """Return Home Assistant platforms supported by a profile."""
+    return list(profile.supported_platforms)
+
+
+def _profile_supports_api_type(profile: DeviceProfile, api_type: str) -> bool:
+    """Return whether a profile can run on a connection mode."""
+    return api_type in profile.supported_api_types
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) -> bool:
     """Set up this integration using UI."""
     api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)
+    try:
+        profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+    except ValueError as err:
+        LOGGER.error("Unable to set up Systemair entry %s: %s", entry.entry_id, err)
+        return False
+
+    if not _profile_supports_api_type(profile, api_type):
+        LOGGER.error(
+            "Systemair profile %s does not support connection mode %s for entry %s",
+            profile.profile_id,
+            api_type,
+            entry.entry_id,
+        )
+        return False
 
     if api_type == API_TYPE_MODBUS_WEBAPI:
         max_registers = entry.options.get(CONF_WEB_API_MAX_REGISTERS, DEFAULT_WEB_API_MAX_REGISTERS)
@@ -75,6 +104,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
             parity=entry.data[CONF_PARITY],
             stopbits=entry.data[CONF_STOPBITS],
             slave_id=entry.data[CONF_SLAVE_ID],
+            read_blocks=profile.read_blocks,
+            alarm_detail_blocks=profile.alarm_detail_blocks,
+            alarm_history_blocks=profile.alarm_history_blocks,
+            test_register=profile.test_register,
         )
         await client.start()
     elif api_type == API_TYPE_HOMESOLUTION:
@@ -90,6 +123,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
             host=entry.data[CONF_HOST],
             port=entry.data[CONF_PORT],
             slave_id=entry.data[CONF_SLAVE_ID],
+            read_blocks=profile.read_blocks,
+            alarm_detail_blocks=profile.alarm_detail_blocks,
+            alarm_history_blocks=profile.alarm_history_blocks,
+            test_register=profile.test_register,
         )
         await client.start()
 
@@ -109,6 +146,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         integration=async_get_loaded_integration(hass, entry.domain),
         model=model,
         api_type=api_type,
+        profile=profile,
     )
 
     if api_type == API_TYPE_MODBUS_WEBAPI:
@@ -120,7 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
 
     entry.async_on_unload(entry.add_update_listener(async_options_update_listener))
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, _profile_platforms(profile))
 
     return True
 
@@ -132,7 +170,15 @@ async def async_options_update_listener(hass: HomeAssistant, entry: ConfigEntry)
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    profile = getattr(entry.runtime_data, "profile", None)
+    if profile is None:
+        try:
+            profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+        except ValueError as err:
+            LOGGER.warning("Unable to resolve Systemair profile while unloading entry %s: %s", entry.entry_id, err)
+
+    unload_platforms = _profile_platforms(profile) if profile is not None else PLATFORMS
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, unload_platforms)
 
     if unload_ok:
         api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)

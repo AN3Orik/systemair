@@ -44,6 +44,7 @@ from .const import (
 from .coordinator import SystemairDataUpdateCoordinator
 from .entity import SystemairEntity
 from .modbus import parameter_map
+from .profiles import DEVICE_PROFILE_LEGACY_D24810
 
 PRESET_MODE_TO_VALUE_MAP = {
     PRESET_MODE_AUTO: 1,
@@ -79,6 +80,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Systemair unit."""
+    if config_entry.runtime_data.profile.profile_id == DEVICE_PROFILE_LEGACY_D24810:
+        async_add_entities([SystemairD24810ClimateEntity(config_entry.runtime_data.coordinator)])
+        return
+
     async_add_entities([SystemairClimateEntity(config_entry.runtime_data.coordinator)])
 
 
@@ -268,6 +273,87 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         mode = FAN_MODE_TO_VALUE_MAP[fan_mode]
         try:
             await self.coordinator.set_modbus_data(parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"], mode)
+        except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
+            raise HomeAssistantError from exc
+        finally:
+            await self.coordinator.async_refresh()
+
+
+class SystemairD24810ClimateEntity(SystemairEntity, ClimateEntity):
+    """Climate entity backed by D24810 registers."""
+
+    _attr_has_entity_name = True
+    _enable_turn_on_off_backwards_compatibility = False
+    _attr_name = None
+    _attr_fan_modes: ClassVar[list[str]] = [FAN_OFF, FAN_LOW, FAN_MEDIUM, FAN_HIGH, PRESET_MODE_AUTO]
+    _attr_hvac_modes: ClassVar[list[HVACMode]] = [HVACMode.OFF, HVACMode.FAN_ONLY]
+    _attr_supported_features = ClimateEntityFeature.FAN_MODE
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+
+    _FAN_VALUE_TO_MODE: ClassVar[dict[int, str]] = {
+        0: FAN_OFF,
+        1: FAN_LOW,
+        2: FAN_MEDIUM,
+        3: FAN_HIGH,
+        4: PRESET_MODE_AUTO,
+    }
+    _FAN_MODE_TO_VALUE: ClassVar[dict[str, int]] = {mode: value for value, mode in _FAN_VALUE_TO_MODE.items()}
+
+    def __init__(self, coordinator: SystemairDataUpdateCoordinator) -> None:
+        """Initialize the D24810 climate entity."""
+        super().__init__(coordinator)
+        self._attr_translation_key = "saveconnect"
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}-climate"
+
+    def _register_value(self, key: str) -> int | float | None:
+        """Read a climate register by logical D24810 climate key."""
+        profile = self.coordinator.config_entry.runtime_data.profile
+        register = profile.registry[profile.climate_registers[key]]
+        return self.coordinator.get_modbus_data(register)
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        """Return fan-only or off mode based on D24810 fan level."""
+        return HVACMode.OFF if self.fan_mode == FAN_OFF else HVACMode.FAN_ONLY
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Map HVAC mode changes to the D24810 fan mode register."""
+        if hvac_mode == HVACMode.OFF:
+            await self.async_set_fan_mode(FAN_OFF)
+            return
+
+        if self.fan_mode in (None, FAN_OFF):
+            await self.async_set_fan_mode(FAN_LOW)
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Return supply air temperature."""
+        value = self._register_value("current_temperature")
+        return None if value is None else float(value)
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Return the current D24810 temperature set point."""
+        value = self._register_value("target_temperature")
+        return None if value is None else float(value)
+
+    @property
+    def fan_mode(self) -> str | None:
+        """Return the current D24810 fan speed level."""
+        value = self._register_value("fan_mode")
+        return None if value is None else self._FAN_VALUE_TO_MODE.get(int(value))
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Set the D24810 fan speed level."""
+        value = self._FAN_MODE_TO_VALUE.get(fan_mode)
+        if value is None:
+            msg = "Invalid fan mode"
+            raise HomeAssistantError(msg)
+
+        profile = self.coordinator.config_entry.runtime_data.profile
+        register = profile.registry[profile.climate_registers["fan_mode"]]
+        try:
+            await self.coordinator.set_modbus_data(register, value)
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
