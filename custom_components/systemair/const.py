@@ -9,6 +9,7 @@ ATTRIBUTION = "Data provided by Systemair SAVE Connect."
 
 # --- Configuration Constants ---
 CONF_MODEL = "model"
+CONF_DEVICE_PROFILE = "device_profile"
 CONF_SLAVE_ID = "slave_id"
 CONF_API_TYPE = "api_type"
 CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
