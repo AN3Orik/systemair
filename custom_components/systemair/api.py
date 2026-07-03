@@ -279,6 +279,10 @@ class SystemairModbusClient(SystemairClientBase):
         self._request_queue.put_nowait((request_type, address, future, kwargs))
         return await future
 
+    async def read_registers(self, address_1based: int, count: int = 1) -> list[int]:
+        """Read one-based holding registers."""
+        return await self._queue_request("read", address=address_1based - 1, count=count)
+
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""
         await self._queue_request("write", address=address_1based - 1, value=value)
@@ -515,6 +519,10 @@ class SystemairSerialClient(SystemairClientBase):
         future = asyncio.Future()
         self._request_queue.put_nowait((request_type, address, future, kwargs))
         return await future
+
+    async def read_registers(self, address_1based: int, count: int = 1) -> list[int]:
+        """Read one-based holding registers."""
+        return await self._queue_request("read", address=address_1based - 1, count=count)
 
     async def write_register(self, address_1based: int, value: int) -> None:
         """Queue a write request for a single holding register."""

@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.systemair.api import READ_BLOCKS_ALARM_DETAILS, READ_BLOCKS_ALARM_HISTORY, READ_BLOCKS_BASE, SystemairModbusClient
+from custom_components.systemair.api import (
+    READ_BLOCKS_ALARM_DETAILS,
+    READ_BLOCKS_ALARM_HISTORY,
+    READ_BLOCKS_BASE,
+    SystemairModbusClient,
+    SystemairSerialClient,
+)
 from custom_components.systemair.profiles.save import SAVE_PROFILE
 
 CUSTOM_TEST_REGISTER = 501
 
 
-class ApiProfileReadBlocksTest(unittest.TestCase):
+class ApiProfileReadBlocksTest(unittest.IsolatedAsyncioTestCase):
     """Verify clients preserve SAVE defaults while accepting profile read blocks."""
 
     def test_api_exports_save_read_blocks_for_backward_compatibility(self) -> None:
@@ -44,3 +50,35 @@ class ApiProfileReadBlocksTest(unittest.TestCase):
         assert client.alarm_detail_blocks == ()  # noqa: S101
         assert client.alarm_history_blocks == ()  # noqa: S101
         assert client.test_register == CUSTOM_TEST_REGISTER  # noqa: S101
+
+    async def test_modbus_client_read_registers_uses_one_based_addresses(self) -> None:
+        """Modbus TCP read_registers converts one-based profile addresses to zero-based transport offsets."""
+        client = SystemairModbusClient(host="127.0.0.1", port=502, slave_id=1)
+        calls = []
+
+        async def fake_queue_request(request_type: str, address: int, **kwargs: int) -> list[int]:
+            calls.append((request_type, address, kwargs))
+            return [42]
+
+        client._queue_request = fake_queue_request  # noqa: SLF001
+
+        result = await client.read_registers(501, count=2)
+
+        assert result == [42]  # noqa: S101
+        assert calls == [("read", 500, {"count": 2})]  # noqa: S101
+
+    async def test_serial_client_read_registers_uses_one_based_addresses(self) -> None:
+        """Serial read_registers converts one-based profile addresses to zero-based transport offsets."""
+        client = SystemairSerialClient(port="COM1")
+        calls = []
+
+        async def fake_queue_request(request_type: str, address: int, **kwargs: int) -> list[int]:
+            calls.append((request_type, address, kwargs))
+            return [24]
+
+        client._queue_request = fake_queue_request  # noqa: SLF001
+
+        result = await client.read_registers(601, count=1)
+
+        assert result == [24]  # noqa: S101
+        assert calls == [("read", 600, {"count": 1})]  # noqa: S101
