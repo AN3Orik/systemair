@@ -484,4 +484,9 @@ D24810_PROFILE = DeviceProfile(
         selects=D24810_SELECT_ENTITIES,
         numbers=D24810_NUMBER_ENTITIES,
     ),
+    climate_registers={
+        "fan_mode": "REG_FAN_SPEED_LEVEL",
+        "current_temperature": "REG_HC_TEMP_IN1",
+        "target_temperature": "REG_HC_TEMP_SP",
+    },
 )

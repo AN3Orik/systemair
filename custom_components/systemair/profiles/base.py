@@ -40,3 +40,4 @@ class DeviceProfile:
     alarm_detail_blocks: tuple[ReadBlock, ...] = ()
     alarm_history_blocks: tuple[ReadBlock, ...] = ()
     entities: ProfileEntityDescriptions = field(default_factory=ProfileEntityDescriptions)
+    climate_registers: dict[str, str] = field(default_factory=dict)
