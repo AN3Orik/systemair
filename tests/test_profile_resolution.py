@@ -22,3 +22,11 @@ class ProfileResolutionTest(unittest.TestCase):
         profile = get_device_profile(None)
 
         assert profile.profile_id == DEVICE_PROFILE_SAVE  # noqa: S101
+
+    def test_old_config_entry_data_resolves_to_save(self) -> None:
+        """Existing entries upgraded from older versions do not need a stored profile id."""
+        entry_data: dict[str, str] = {}
+
+        profile = get_device_profile(entry_data.get(CONF_DEVICE_PROFILE))
+
+        assert profile.profile_id == DEVICE_PROFILE_SAVE  # noqa: S101

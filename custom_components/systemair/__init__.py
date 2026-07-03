@@ -64,10 +64,17 @@ def _profile_platforms(profile: DeviceProfile) -> list[Platform]:
     return list(profile.supported_platforms)
 
 
+def _profile_supports_api_type(profile: DeviceProfile, api_type: str) -> bool:
+    """Return whether a profile can run on a connection mode."""
+    return api_type in profile.supported_api_types
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) -> bool:
     """Set up this integration using UI."""
     api_type = entry.data.get(CONF_API_TYPE, API_TYPE_MODBUS_TCP)
     profile = get_device_profile(entry.data.get(CONF_DEVICE_PROFILE))
+    if not _profile_supports_api_type(profile, api_type):
+        return False
 
     if api_type == API_TYPE_MODBUS_WEBAPI:
         max_registers = entry.options.get(CONF_WEB_API_MAX_REGISTERS, DEFAULT_WEB_API_MAX_REGISTERS)
