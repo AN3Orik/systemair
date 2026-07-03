@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from homeassistant.const import Platform
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.sensor import SensorStateClass
+from homeassistant.const import PERCENTAGE, REVOLUTIONS_PER_MINUTE, EntityCategory, Platform, UnitOfTime
 
 from custom_components.systemair.const import API_TYPE_MODBUS_SERIAL, API_TYPE_MODBUS_TCP
 from custom_components.systemair.modbus import IntegerType, ModbusParameter, RegisterType
 from custom_components.systemair.profiles.base import DeviceProfile, ProfileEntityDescriptions
+from custom_components.systemair.profiles.entities import (
+    BinarySensorProfileEntity,
+    NumberProfileEntity,
+    SelectProfileEntity,
+    SensorProfileEntity,
+    SwitchProfileEntity,
+)
 
 
 def _uint(  # noqa: PLR0913 - local builder mirrors ModbusParameter fields.
@@ -356,6 +365,83 @@ D24810_PARAMETERS = [
     *_wireless_di_connection_parameters(),
 ]
 
+D24810_SENSOR_ENTITIES = (
+    SensorProfileEntity(
+        key="d24810_system_type",
+        register_key="REG_SYSTEM_TYPE",
+        translation_key="d24810_system_type",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorProfileEntity(
+        key="meter_sf_rpm",
+        register_key="REG_FAN_SF_RPM",
+        translation_key="meter_sf_rpm",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
+    ),
+    SensorProfileEntity(
+        key="meter_ef_rpm",
+        register_key="REG_FAN_EF_RPM",
+        translation_key="meter_ef_rpm",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=REVOLUTIONS_PER_MINUTE,
+    ),
+    SensorProfileEntity(
+        key="meter_sf_reg_speed",
+        register_key="REG_FAN_SF_PWM",
+        translation_key="meter_sf_reg_speed",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    SensorProfileEntity(
+        key="meter_ef_reg_speed",
+        register_key="REG_FAN_EF_PWM",
+        translation_key="meter_ef_reg_speed",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    SensorProfileEntity(
+        key="filter_days",
+        register_key="REG_FILTER_DAYS",
+        translation_key="filter_days",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+D24810_BINARY_SENSOR_ENTITIES = (
+    BinarySensorProfileEntity(
+        key="manual_fan_stop_allowed",
+        register_key="REG_FAN_ALLOW_MANUAL_STOP",
+        translation_key="manual_fan_stop_allowed",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+D24810_SELECT_ENTITIES = (
+    SelectProfileEntity(
+        key="fan_speed_level",
+        register_key="REG_FAN_SPEED_LEVEL",
+        translation_key="fan_speed_level",
+        icon="mdi:fan",
+        options_map={0: "off", 1: "low", 2: "normal", 3: "high", 4: "auto"},
+    ),
+)
+
+D24810_SWITCH_ENTITIES: tuple[SwitchProfileEntity, ...] = ()
+
+D24810_NUMBER_ENTITIES = (
+    NumberProfileEntity(
+        key="filter_period",
+        register_key="REG_FILTER_PER",
+        translation_key="filter_period",
+        native_unit_of_measurement=UnitOfTime.MONTHS,
+        entity_category=EntityCategory.CONFIG,
+    ),
+)
+
 d24810_parameter_map = {param.short: param for param in D24810_PARAMETERS}
 
 D24810_PROFILE = DeviceProfile(
@@ -391,5 +477,11 @@ D24810_PROFILE = DeviceProfile(
         "VTC200",
         "VTC100",
     ),
-    entities=ProfileEntityDescriptions(),
+    entities=ProfileEntityDescriptions(
+        sensors=D24810_SENSOR_ENTITIES,
+        binary_sensors=D24810_BINARY_SENSOR_ENTITIES,
+        switches=D24810_SWITCH_ENTITIES,
+        selects=D24810_SELECT_ENTITIES,
+        numbers=D24810_NUMBER_ENTITIES,
+    ),
 )
