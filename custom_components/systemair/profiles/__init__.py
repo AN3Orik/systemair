@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from custom_components.systemair.profiles.d24810 import D24810_PROFILE
 from custom_components.systemair.profiles.save import SAVE_PROFILE
 
 if TYPE_CHECKING:
@@ -15,6 +16,7 @@ DEVICE_PROFILE_LEGACY_D24810 = "legacy_d24810"
 
 _PROFILES: dict[str, DeviceProfile] = {
     DEVICE_PROFILE_SAVE: SAVE_PROFILE,
+    DEVICE_PROFILE_LEGACY_D24810: D24810_PROFILE,
 }
 
 
