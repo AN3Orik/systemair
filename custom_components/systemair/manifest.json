@@ -2,9 +2,7 @@
   "domain": "systemair",
   "name": "Systemair",
   "codeowners": [
-    "@AN3Orik",
-    "@bstenborg",
-    "@tesharp"
+    "@AN3Orik"
   ],
   "config_flow": true,
   "documentation": "https://github.com/AN3Orik/systemair",

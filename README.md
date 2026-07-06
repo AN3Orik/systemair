@@ -5,9 +5,9 @@
 [![GitHub License](https://img.shields.io/github/license/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/blob/main/LICENSE)
 [![TIP](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg?style=for-the-badge)](https://dalink.to/an3orik)
 
-This Home Assistant integration allows you to monitor and control **Systemair SAVE** ventilation units through multiple connection methods. It supports communication via **Modbus TCP**, **Modbus Serial (RS485)**, and **Web API**, providing flexibility for different hardware configurations.
+This Home Assistant integration allows you to monitor and control **Systemair SAVE** and **Legacy Residential / D24810** ventilation units through supported device profiles. It supports communication via **Modbus TCP**, **Modbus Serial (RS485)**, and **Web API**.
 
-This integration was tested with SAVE VSR 300 and VSR 500 models but should be compatible with other units that support Modbus protocol.
+This integration was tested with SAVE VSR 300 and VSR 500 models. Legacy Residential / D24810 support is available through Modbus only.
 
 ## Overview
 
@@ -15,10 +15,11 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
 
 ## Features
 
+*   **Device Profiles:** Support for `SAVE` and `Legacy Residential / D24810` register maps. Modbus connections can auto-detect the profile or use manual selection.
 *   **Multiple Connection Methods:** Support for three different connection types:
-    *   **Modbus TCP** - via Systemair SAVECONNECT 1.0 or compatible Modbus TCP modules
-    *   **Modbus Serial (RS485)** - via USB-to-Modbus converters
-    *   **Web API (HTTP)** - via Systemair SAVECONNECT 2.0 IAM module
+    *   **Modbus TCP** - SAVE and Legacy Residential / D24810
+    *   **Modbus Serial (RS485)** - SAVE and Legacy Residential / D24810
+    *   **Web API (HTTP)** - SAVE via Systemair SAVECONNECT 2.0 IAM module
 *   **Climate Control:** Full control over HVAC modes (Off, Fan Only, Heat, Cool), target temperature, fan speed, and preset modes (Auto, Manual, Away, Holiday, etc.).
 *   **Calculated Power Consumption:** Monitor the estimated power usage of the supply fan, extract fan, and the total power consumption of the unit, including the re-heater. Essential for energy tracking in Home Assistant's Energy Dashboard.
 *   **Advanced Configuration Controls:** Directly configure key operational parameters from Home Assistant, including:
@@ -38,13 +39,13 @@ This integration was tested with SAVE VSR 300 and VSR 500 models but should be c
 
 ### Connection Method 1: Modbus TCP (SAVECONNECT 1.0)
 
-1.  A Systemair SAVE ventilation unit equipped with a **[SAVECONNECT 1.0 (IAM)](https://www.systemair.com/en-gb/p/internet-access-module-iam-110534)** module or any other Modbus TCP-to-RTU converter.
+1.  A Systemair SAVE or Legacy Residential / D24810 ventilation unit with Modbus TCP access, using **[SAVECONNECT 1.0 (IAM)](https://www.systemair.com/en-gb/p/internet-access-module-iam-110534)** or another Modbus TCP-to-RTU converter.
 2.  The module must be connected to the same local network as your Home Assistant instance.
 3.  You need to know the IP address of the module. You can typically find this in your router's client list.
 
 ### Connection Method 2: Modbus Serial (RS485)
 
-1.  A Systemair SAVE ventilation unit with accessible Modbus RS485 port.
+1.  A Systemair SAVE or Legacy Residential / D24810 ventilation unit with accessible Modbus RS485 port.
 2.  A **USB-to-Modbus RS485 converter** connected to your Home Assistant server.
 3.  The serial port path (e.g., `/dev/ttyUSB0` on Linux, `COM3` on Windows).
 4.  Communication parameters (usually 19200 baud, 8 data bits, no parity, 1 stop bit).
@@ -90,7 +91,8 @@ Configure connection to SAVECONNECT 1.0 or compatible Modbus TCP module:
 *   **Host:** The IP address of your Systemair module (e.g., `192.168.1.50`).
 *   **Port:** The Modbus TCP port for the module. The default is `502`.
 *   **Slave ID:** The Modbus slave ID of the unit. The default is `1`.
-*   **Ventilation Unit Model:** Select your specific SAVE unit model from the dropdown list (e.g., `VSR 300`, `VSR 500`). **This is crucial for accurate power consumption calculations.**
+*   **Device Profile:** Select `Auto`, `SAVE`, or `Legacy Residential / D24810`. Auto-detection is available for Modbus only.
+*   **Ventilation Unit Model:** Select your specific unit model from the dropdown list. For SAVE units, this is used for power consumption calculations.
 
 ### Option B: Modbus Serial (RS485)
 
@@ -102,7 +104,8 @@ Configure connection via USB-to-Modbus RS485 converter:
 *   **Parity:** Parity checking. Options: `N` (None), `E` (Even), `O` (Odd). Default is `N`.
 *   **Stop Bits:** Number of stop bits. Options: `1` or `2` (default: `1`).
 *   **Slave ID:** The Modbus slave ID of the unit. The default is `1`.
-*   **Ventilation Unit Model:** Select your specific SAVE unit model from the dropdown list (e.g., `VSR 300`, `VSR 500`).
+*   **Device Profile:** Select `Auto`, `SAVE`, or `Legacy Residential / D24810`. Auto-detection is available for Modbus only.
+*   **Ventilation Unit Model:** Select your specific unit model from the dropdown list.
 
 ### Option C: Web API (SAVECONNECT 2.0)
 
@@ -111,6 +114,8 @@ Configure connection to SAVECONNECT 2.0 IAM module:
 *   **IP Address:** The IP address of your SAVECONNECT 2.0 IAM module (e.g., `192.168.1.50`).
 *   **Device Password (Optional):** Enter the password used by the SAVECONNECT 2.0 IAM web interface if one is configured.
 *   **Ventilation Unit Model (Optional):** You can manually select your unit model, or leave it empty to auto-detect from the device.
+
+Web API uses the `SAVE` profile only.
 
 ---
 
@@ -124,7 +129,7 @@ After installation, configure these options via **Settings > Devices & Services 
 
 | Option | Range | Default | Description |
 |--------|-------|---------|-------------|
-| Ventilation Unit Model | — | VSR 300 | Select your unit model for accurate power calculations |
+| Ventilation Unit Model | — | VSR 300 | Select your unit model; used for SAVE power calculations |
 | Update Interval | 10-120s | 60s | How often to poll the device for updates |
 | Max Registers per Web API Request | 30-125 | 70 | Registers per request (Web API only) |
 | Enable Alarm History | True/False | False | Enable fetching alarm history (increases Modbus load) |
@@ -134,6 +139,8 @@ After installation, configure these options via **Settings > Devices & Services 
 ## Entities Provided
 
 This integration creates a single device for your ventilation unit with the following entities:
+
+Entity availability depends on the selected device profile. The `SAVE` profile exposes the full entity set. The `Legacy Residential / D24810` profile exposes the subset supported by the D24810 register map.
 
 #### Climate
 
