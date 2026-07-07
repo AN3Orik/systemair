@@ -24,7 +24,14 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY, MODEL_SPECS
+from .const import (
+    CONF_ENABLE_ALARM_HISTORY,
+    DEFAULT_BASE_POWER,
+    DEFAULT_ENABLE_ALARM_HISTORY,
+    DEFAULT_FAN_POWER_EXPONENT,
+    DEFAULT_FAN_POWER_FACTOR,
+    MODEL_SPECS,
+)
 from .entity import SystemairEntity
 from .modbus import (
     ModbusParameter,
@@ -448,7 +455,7 @@ async def async_setup_entry(
     sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in _profile_sensor_descriptions(profile)]
     entities: list[SensorEntity] = [*sensors]
 
-    if profile.profile_id == DEVICE_PROFILE_SAVE:
+    if profile.power_registers is not None:
         power_sensors_map = {desc.key: SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS}
         power_sensors = list(power_sensors_map.values())
         energy_sensors = [
@@ -599,42 +606,55 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
 
+        profile = self.coordinator.config_entry.runtime_data.profile
+        power_registers = profile.power_registers
+        if power_registers is None:
+            return None
+
         model = self.coordinator.config_entry.runtime_data.model
-        specs = MODEL_SPECS.get(model)
+        specs = MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
         if not specs:
             return None
 
-        # Get fan counts from specs, defaulting to 0 if not present
+        # fan_power is the documented maximum power for one fan. Fan load is non-linear by output percentage.
         num_supply_fans = specs.get("supply_fans", 0)
         num_extract_fans = specs.get("extract_fans", 0)
-        total_fans = num_supply_fans + num_extract_fans
+        base_power = specs.get("base_power", DEFAULT_BASE_POWER)
+        fan_power = specs.get("fan_power", 0) * specs.get("fan_power_factor", DEFAULT_FAN_POWER_FACTOR)
+        fan_power_exponent = specs.get("fan_power_exponent", DEFAULT_FAN_POWER_EXPONENT)
 
-        # Calculate power per fan
-        power_per_fan = 0
-        if total_fans > 0:
-            power_per_fan = specs.get("fan_power", 0) / total_fans
+        supply_register = profile.registry.get(power_registers.supply_output)
+        extract_register = profile.registry.get(power_registers.extract_output)
+        heater_register = profile.registry.get(power_registers.heater_output) if power_registers.heater_output else None
+        if supply_register is None or extract_register is None:
+            return None
 
-        # Get current fan speeds and heater status
-        supply_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_SAF"])
-        extract_fan_pct = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_EAF"])
-        heater_on = self.coordinator.get_modbus_data(parameter_map["REG_OUTPUT_TRIAC"])
+        supply_fan_pct = self.coordinator.get_modbus_data(supply_register)
+        extract_fan_pct = self.coordinator.get_modbus_data(extract_register)
+        heater_output = self.coordinator.get_modbus_data(heater_register) if heater_register else 0
+
+        if (num_supply_fans and supply_fan_pct is None) or (num_extract_fans and extract_fan_pct is None):
+            return None
 
         if supply_fan_pct is None:
             supply_fan_pct = 0
         if extract_fan_pct is None:
             extract_fan_pct = 0
-        if heater_on is None:
-            heater_on = 0
+        if heater_output is None:
+            heater_output = 0
 
-        # Calculate power for each component
-        supply_power = (float(supply_fan_pct) / 100) * power_per_fan * num_supply_fans
-        extract_power = (float(extract_fan_pct) / 100) * power_per_fan * num_extract_fans
-        heater_power = specs.get("heater_power", 0) if heater_on else 0
+        supply_power = ((float(supply_fan_pct) / 100) ** fan_power_exponent) * fan_power * num_supply_fans
+        extract_power = ((float(extract_fan_pct) / 100) ** fan_power_exponent) * fan_power * num_extract_fans
+        heater_power = specs.get("heater_power", 0)
+        if power_registers.heater_output_is_percentage:
+            heater_power *= float(heater_output) / 100
+        elif not heater_output:
+            heater_power = 0
 
         power_map = {
             "supply_fan_power": round(supply_power, 1),
             "extract_fan_power": round(extract_power, 1),
-            "total_power": round(supply_power + extract_power + heater_power, 1),
+            "total_power": round(base_power + supply_power + extract_power + heater_power, 1),
         }
 
         return power_map.get(self.entity_description.key)

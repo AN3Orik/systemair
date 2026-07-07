@@ -12,7 +12,7 @@ from custom_components.systemair.const import (
     MODEL_SPECS,
 )
 from custom_components.systemair.modbus import parameter_map
-from custom_components.systemair.profiles.base import DeviceProfile
+from custom_components.systemair.profiles.base import DeviceProfile, ProfilePowerRegisters
 
 SAVE_READ_BLOCKS_BASE = (
     (1001, 62),
@@ -76,4 +76,9 @@ SAVE_PROFILE = DeviceProfile(
     alarm_history_blocks=SAVE_READ_BLOCKS_ALARM_HISTORY,
     test_register=parameter_map["REG_TC_SP"].register,
     model_options=tuple(MODEL_SPECS),
+    power_registers=ProfilePowerRegisters(
+        supply_output="REG_OUTPUT_SAF",
+        extract_output="REG_OUTPUT_EAF",
+        heater_output="REG_OUTPUT_TRIAC",
+    ),
 )

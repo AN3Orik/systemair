@@ -82,6 +82,20 @@ class ProfileEntityBoundariesTest(unittest.TestCase):
         assert switch_registers == set()  # noqa: S101
         assert number_registers == {"REG_FILTER_PER"}  # noqa: S101
 
+    def test_d24810_power_registers_use_d24810_registry(self) -> None:
+        """D24810 calculated power reads legacy fan PWM and heater output registers."""
+        power_registers = D24810_PROFILE.power_registers
+
+        assert power_registers is not None  # noqa: S101
+        assert power_registers.supply_output == "REG_FAN_SF_PWM"  # noqa: S101
+        assert power_registers.extract_output == "REG_FAN_EF_PWM"  # noqa: S101
+        assert power_registers.heater_output == "REG_HC_WH_SIGNAL"  # noqa: S101
+        assert power_registers.heater_output_is_percentage  # noqa: S101
+        for key in (power_registers.supply_output, power_registers.extract_output, power_registers.heater_output):
+            with self.subTest(key=key):
+                assert key in d24810_parameter_map  # noqa: S101
+                assert key not in parameter_map  # noqa: S101
+
     def test_missing_profile_entity_registers_are_skipped(self) -> None:
         """A bad profile entity reference does not crash platform setup."""
         profile = DeviceProfile(

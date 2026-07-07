@@ -8,7 +8,7 @@ from homeassistant.const import PERCENTAGE, REVOLUTIONS_PER_MINUTE, EntityCatego
 
 from custom_components.systemair.const import API_TYPE_MODBUS_SERIAL, API_TYPE_MODBUS_TCP
 from custom_components.systemair.modbus import IntegerType, ModbusParameter, RegisterType
-from custom_components.systemair.profiles.base import DeviceProfile, ProfileEntityDescriptions
+from custom_components.systemair.profiles.base import DeviceProfile, ProfileEntityDescriptions, ProfilePowerRegisters
 from custom_components.systemair.profiles.entities import (
     BinarySensorProfileEntity,
     NumberProfileEntity,
@@ -494,12 +494,31 @@ D24810_PROFILE = DeviceProfile(
         "VTC200",
         "VTC100",
     ),
+    model_aliases={
+        "VR400DE": "VR 400 DE",
+        "VTC200": "VTC 200 L",
+        "VTC300": "VTC 300 L",
+        "VTC700": "VTC 700 L",
+        "VTR150K": "VTR 150/K L 500W",
+        "VSR300": "VSR 300",
+        "VSR500": "VSR 500",
+        "VSR150": "VSR 150/B",
+        "VTR300": "VTR 300/B L",
+        "VTR500": "VTR 500 L",
+        "VSR300DE": "VSR 300",
+    },
     entities=ProfileEntityDescriptions(
         sensors=D24810_SENSOR_ENTITIES,
         binary_sensors=D24810_BINARY_SENSOR_ENTITIES,
         switches=D24810_SWITCH_ENTITIES,
         selects=D24810_SELECT_ENTITIES,
         numbers=D24810_NUMBER_ENTITIES,
+    ),
+    power_registers=ProfilePowerRegisters(
+        supply_output="REG_FAN_SF_PWM",
+        extract_output="REG_FAN_EF_PWM",
+        heater_output="REG_HC_WH_SIGNAL",
+        heater_output_is_percentage=True,
     ),
     climate_registers={
         "fan_mode": "REG_FAN_SPEED_LEVEL",

@@ -24,6 +24,9 @@ DEFAULT_WEB_API_MAX_REGISTERS = 70
 DEFAULT_UPDATE_INTERVAL = 60
 DEFAULT_ENABLE_ALARM_DETAILS = True
 DEFAULT_ENABLE_ALARM_HISTORY = False
+DEFAULT_BASE_POWER = 16
+DEFAULT_FAN_POWER_FACTOR = 0.92
+DEFAULT_FAN_POWER_EXPONENT = 2.1
 
 # --- API Types ---
 API_TYPE_MODBUS_TCP = "modbus_tcp"
@@ -66,6 +69,11 @@ MODEL_SPECS = {
     "VSC 100": {"fan_power": 27, "heater_power": 0, "supply_fans": 1, "extract_fans": 0},
     "VSC 200": {"fan_power": 81, "heater_power": 0, "supply_fans": 1, "extract_fans": 0},
     "VSC 300": {"fan_power": 115, "heater_power": 0, "supply_fans": 1, "extract_fans": 0},
+    "VR 400 DCV/B": {"fan_power": 114, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1},
+    "VR 400 DC": {"fan_power": 115, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1},
+    "VR 400 DE": {"fan_power": 115, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1},
+    "VR 700 DCV": {"fan_power": 240, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1},
+    "VR 700 DC": {"fan_power": 246, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1},
     "VSR 150/B": {"fan_power": 70, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
     "VSR 150/B L": {"fan_power": 70, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
     "VSR 150/B R": {"fan_power": 70, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
@@ -94,6 +102,10 @@ MODEL_SPECS = {
     "VTR 150/K L 1000W": {"fan_power": 172, "heater_power": 1000, "supply_fans": 1, "extract_fans": 1},
     "VTR 150/K R 500W": {"fan_power": 172, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
     "VTR 150/K R 1000W": {"fan_power": 172, "heater_power": 1000, "supply_fans": 1, "extract_fans": 1},
+    "VTR 200/B L 500W": {"fan_power": 86, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
+    "VTR 200/B L 1000W": {"fan_power": 86, "heater_power": 1000, "supply_fans": 1, "extract_fans": 1},
+    "VTR 200/B R 500W": {"fan_power": 86, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
+    "VTR 200/B R 1000W": {"fan_power": 86, "heater_power": 1000, "supply_fans": 1, "extract_fans": 1},
     "VTR 250/B L 500W": {"fan_power": 162, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
     "VTR 250/B L 1000W": {"fan_power": 162, "heater_power": 1000, "supply_fans": 1, "extract_fans": 1},
     "VTR 250/B R 500W": {"fan_power": 162, "heater_power": 500, "supply_fans": 1, "extract_fans": 1},
