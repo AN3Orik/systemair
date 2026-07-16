@@ -1,5 +1,7 @@
 """Tests for calculated whole-unit airflow sensors."""
 
+# ruff: noqa: PT009
+
 from __future__ import annotations
 
 import unittest
@@ -58,11 +60,9 @@ class FakeCoordinator:
 
 def airflow_sensor(key: str, coordinator: FakeCoordinator) -> object:
     """Create an airflow sensor without Home Assistant entity initialization."""
-    sensor_class = getattr(sensor_module, "SystemairAirflowSensor", None)
+    sensor_class = sensor_module.SystemairAirflowSensor
     descriptions = getattr(sensor_module, "AIRFLOW_SENSORS", ())
-    assert sensor_class is not None  # noqa: S101
-    description = next((desc for desc in descriptions if desc.key == key), None)
-    assert description is not None  # noqa: S101
+    description = next(desc for desc in descriptions if desc.key == key)
     entity = sensor_class.__new__(sensor_class)
     entity.coordinator = coordinator
     entity.entity_description = description
@@ -98,17 +98,17 @@ class AirflowCalculationTest(unittest.TestCase):
 
     def test_airflow_scales_linearly_from_actual_fan_output(self) -> None:
         """A partial fan output returns the matching share of maximum airflow."""
-        assert calculate_airflow(VSR500_MAX_AIRFLOW, 46) == VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT  # noqa: S101
+        self.assertEqual(calculate_airflow(VSR500_MAX_AIRFLOW, 46), VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT)
 
     def test_airflow_clamps_fan_output_to_valid_percentage(self) -> None:
         """Invalid output values cannot produce negative or above-maximum airflow."""
-        assert calculate_airflow(VSR500_MAX_AIRFLOW, -5) == 0  # noqa: S101
-        assert calculate_airflow(VSR500_MAX_AIRFLOW, 120) == VSR500_MAX_AIRFLOW  # noqa: S101
+        self.assertEqual(calculate_airflow(VSR500_MAX_AIRFLOW, -5), 0)
+        self.assertEqual(calculate_airflow(VSR500_MAX_AIRFLOW, 120), VSR500_MAX_AIRFLOW)
 
     def test_airflow_is_unknown_without_reference_or_output(self) -> None:
         """Missing model airflow or live output keeps the estimate unavailable."""
-        assert calculate_airflow(None, 50) is None  # noqa: S101
-        assert calculate_airflow(VSR500_MAX_AIRFLOW, None) is None  # noqa: S101
+        self.assertIsNone(calculate_airflow(None, 50))
+        self.assertIsNone(calculate_airflow(VSR500_MAX_AIRFLOW, None))
 
 
 class AirflowSensorTest(unittest.TestCase):
@@ -118,8 +118,8 @@ class AirflowSensorTest(unittest.TestCase):
         """Different SAF and EAF percentages produce different airflow values."""
         coordinator = FakeCoordinator("VSR 500", saf_pct=46, eaf_pct=44)
 
-        assert airflow_sensor("supply_airflow", coordinator).native_value == VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT  # noqa: S101
-        assert airflow_sensor("extract_airflow", coordinator).native_value == VSR500_EXTRACT_AIRFLOW_AT_44_PERCENT  # noqa: S101
+        self.assertEqual(airflow_sensor("supply_airflow", coordinator).native_value, VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT)
+        self.assertEqual(airflow_sensor("extract_airflow", coordinator).native_value, VSR500_EXTRACT_AIRFLOW_AT_44_PERCENT)
 
     def test_calibrated_maximum_overrides_passport_per_fan_side(self) -> None:
         """Supply and extract calibration values are applied independently."""
@@ -130,43 +130,49 @@ class AirflowSensorTest(unittest.TestCase):
             options={"supply_airflow_max": 700, "extract_airflow_max": 500},
         )
 
-        assert airflow_sensor("supply_airflow", coordinator).native_value == CALIBRATED_SUPPLY_AIRFLOW_AT_46_PERCENT  # noqa: S101
-        assert airflow_sensor("extract_airflow", coordinator).native_value == CALIBRATED_EXTRACT_AIRFLOW_AT_44_PERCENT  # noqa: S101
+        self.assertEqual(airflow_sensor("supply_airflow", coordinator).native_value, CALIBRATED_SUPPLY_AIRFLOW_AT_46_PERCENT)
+        self.assertEqual(airflow_sensor("extract_airflow", coordinator).native_value, CALIBRATED_EXTRACT_AIRFLOW_AT_44_PERCENT)
 
     def test_d24810_uses_legacy_pwm_output_registers(self) -> None:
         """Legacy models calculate airflow from profile-owned PWM outputs."""
         coordinator = FakeCoordinator("VSR500", saf_pct=46, eaf_pct=44, profile=D24810_PROFILE)
 
-        assert airflow_sensor("supply_airflow", coordinator).native_value == VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT  # noqa: S101
-        assert airflow_sensor("extract_airflow", coordinator).native_value == VSR500_EXTRACT_AIRFLOW_AT_44_PERCENT  # noqa: S101
+        self.assertEqual(airflow_sensor("supply_airflow", coordinator).native_value, VSR500_SUPPLY_AIRFLOW_AT_46_PERCENT)
+        self.assertEqual(airflow_sensor("extract_airflow", coordinator).native_value, VSR500_EXTRACT_AIRFLOW_AT_44_PERCENT)
 
     def test_missing_live_output_keeps_sensor_unknown(self) -> None:
         """Unavailable fan output does not become a false zero airflow."""
         coordinator = FakeCoordinator("VSR 500", saf_pct=None, eaf_pct=44)
 
-        assert airflow_sensor("supply_airflow", coordinator).native_value is None  # noqa: S101
+        self.assertIsNone(airflow_sensor("supply_airflow", coordinator).native_value)
 
     def test_attributes_explain_passport_and_calibrated_references(self) -> None:
         """Sensor attributes expose the percentage, reference, and its source."""
         coordinator = FakeCoordinator("VSR 500", saf_pct=46, eaf_pct=44, options={"supply_airflow_max": 700})
 
-        assert airflow_sensor("supply_airflow", coordinator).extra_state_attributes == {  # noqa: S101
-            "fan_output_percentage": 46.0,
-            "reference_max_airflow_m3h": 700.0,
-            "reference_source": "calibrated",
-        }
-        assert airflow_sensor("extract_airflow", coordinator).extra_state_attributes == {  # noqa: S101
-            "fan_output_percentage": 44.0,
-            "reference_max_airflow_m3h": 609.0,
-            "reference_source": "passport",
-        }
+        self.assertDictEqual(
+            airflow_sensor("supply_airflow", coordinator).extra_state_attributes,
+            {
+                "fan_output_percentage": 46.0,
+                "reference_max_airflow_m3h": 700.0,
+                "reference_source": "calibrated",
+            },
+        )
+        self.assertDictEqual(
+            airflow_sensor("extract_airflow", coordinator).extra_state_attributes,
+            {
+                "fan_output_percentage": 44.0,
+                "reference_max_airflow_m3h": 609.0,
+                "reference_source": "passport",
+            },
+        )
 
     def test_sensor_creation_matches_model_fans_and_known_airflow(self) -> None:
         """Only supported fan sides with a known maximum create entities."""
-        assert airflow_sensor_keys("VSR 500") == ("supply_airflow", "extract_airflow")  # noqa: S101
-        assert airflow_sensor_keys("VSC 100") == ("supply_airflow", "extract_airflow")  # noqa: S101
-        assert airflow_sensor_keys("VR 400 DC") == ()  # noqa: S101
-        assert airflow_sensor_keys("VSR500", D24810_PROFILE) == ("supply_airflow", "extract_airflow")  # noqa: S101
+        self.assertEqual(airflow_sensor_keys("VSR 500"), ("supply_airflow", "extract_airflow"))
+        self.assertEqual(airflow_sensor_keys("VSC 100"), ("supply_airflow", "extract_airflow"))
+        self.assertEqual(airflow_sensor_keys("VR 400 DC"), ())
+        self.assertEqual(airflow_sensor_keys("VSR500", D24810_PROFILE), ("supply_airflow", "extract_airflow"))
 
 
 class AirflowCalibrationOptionsTest(unittest.TestCase):
@@ -174,25 +180,34 @@ class AirflowCalibrationOptionsTest(unittest.TestCase):
 
     def test_passport_values_are_suggested_for_supported_fan_sides(self) -> None:
         """Two-fan and single-fan units receive the appropriate defaults."""
-        assert calibration_suggestions("VSR 500") == {  # noqa: S101
-            "supply_airflow_max": 609.0,
-            "extract_airflow_max": 609.0,
-        }
-        assert calibration_suggestions("VSC 100") == {  # noqa: S101
-            "supply_airflow_max": 166.0,
-            "extract_airflow_max": 166.0,
-        }
+        self.assertDictEqual(
+            calibration_suggestions("VSR 500"),
+            {
+                "supply_airflow_max": 609.0,
+                "extract_airflow_max": 609.0,
+            },
+        )
+        self.assertDictEqual(
+            calibration_suggestions("VSC 100"),
+            {
+                "supply_airflow_max": 166.0,
+                "extract_airflow_max": 166.0,
+            },
+        )
 
     def test_saved_calibration_replaces_passport_suggestions(self) -> None:
         """Existing per-side calibration remains visible when editing options."""
-        assert calibration_suggestions(  # noqa: S101
-            "VSR 500",
-            options={"supply_airflow_max": 700, "extract_airflow_max": 500},
-        ) == {"supply_airflow_max": 700.0, "extract_airflow_max": 500.0}
+        self.assertDictEqual(
+            calibration_suggestions(
+                "VSR 500",
+                options={"supply_airflow_max": 700, "extract_airflow_max": 500},
+            ),
+            {"supply_airflow_max": 700.0, "extract_airflow_max": 500.0},
+        )
 
     def test_unknown_passport_airflow_has_no_calibration_fields(self) -> None:
         """A model without qv max cannot accept a misleading calibration."""
-        assert calibration_suggestions("VR 400 DC") == {}  # noqa: S101
+        self.assertDictEqual(calibration_suggestions("VR 400 DC"), {})
 
     def test_model_change_clears_previous_calibration(self) -> None:
         """Calibration belonging to another model is removed on submission."""
@@ -203,10 +218,10 @@ class AirflowCalibrationOptionsTest(unittest.TestCase):
             "update_interval": 60,
         }
 
-        assert reset_calibration(submitted, "VSR 500") == {"model": "VSR 700", "update_interval": 60}  # noqa: S101
+        self.assertDictEqual(reset_calibration(submitted, "VSR 500"), {"model": "VSR 700", "update_interval": 60})
 
     def test_same_model_preserves_calibration(self) -> None:
         """Editing other options does not discard valid calibration."""
         submitted = {"model": "VSR 500", "supply_airflow_max": 700, "extract_airflow_max": 500}
 
-        assert reset_calibration(submitted, "VSR 500") == submitted  # noqa: S101
+        self.assertDictEqual(reset_calibration(submitted, "VSR 500"), submitted)

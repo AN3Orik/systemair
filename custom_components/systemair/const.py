@@ -1,6 +1,8 @@
 """Constants for Systemair."""
 
+from collections.abc import Mapping
 from logging import Logger, getLogger
+from typing import Any
 
 LOGGER: Logger = getLogger(__package__)
 
@@ -123,6 +125,12 @@ MODEL_SPECS = {
     "VTR 700 L": {"fan_power": 340, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 951},
     "VTR 700 R": {"fan_power": 340, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 951},
 }
+
+
+def resolve_model_specs(model: str, model_aliases: Mapping[str, str]) -> dict[str, Any] | None:
+    """Resolve model specifications through device-profile aliases."""
+    return MODEL_SPECS.get(model) or MODEL_SPECS.get(model_aliases.get(model, ""))
+
 
 # Constants from the old integration
 MAX_TEMP = 30

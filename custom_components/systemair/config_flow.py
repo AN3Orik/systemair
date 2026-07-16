@@ -58,6 +58,7 @@ from .const import (
     SERIAL_BYTESIZES,
     SERIAL_PARITIES,
     SERIAL_STOPBITS,
+    resolve_model_specs,
 )
 from .profiles import (
     DEVICE_PROFILE_AUTO,
@@ -105,7 +106,7 @@ def _modbus_model_options() -> list[str]:
 
 def _airflow_calibration_suggestions(model: str, profile: Any, options: dict[str, Any]) -> dict[str, float]:
     """Return per-side airflow values suggested by model data or saved options."""
-    specs = MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
+    specs = resolve_model_specs(model, profile.model_aliases)
     if specs is None or (passport_max := specs.get("max_airflow_m3h")) is None:
         return {}
 

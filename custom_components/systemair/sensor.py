@@ -33,7 +33,7 @@ from .const import (
     DEFAULT_ENABLE_ALARM_HISTORY,
     DEFAULT_FAN_POWER_EXPONENT,
     DEFAULT_FAN_POWER_FACTOR,
-    MODEL_SPECS,
+    resolve_model_specs,
 )
 from .entity import SystemairEntity
 from .modbus import (
@@ -481,23 +481,13 @@ def _profile_sensor_descriptions(profile: DeviceProfile) -> tuple[SystemairSenso
     return tuple(descriptions)
 
 
-def _model_specs(model: str, profile: DeviceProfile) -> dict[str, Any] | None:
-    """Resolve model specifications through profile aliases."""
-    return MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
-
-
 def airflow_sensor_descriptions(model: str, profile: DeviceProfile) -> tuple[SystemairAirflowSensorEntityDescription, ...]:
     """Return airflow sensors supported by the selected unit model."""
-    specs = _model_specs(model, profile)
+    specs = resolve_model_specs(model, profile.model_aliases)
     if specs is None or specs.get("max_airflow_m3h") is None or profile.power_registers is None:
         return ()
 
-    descriptions: list[SystemairAirflowSensorEntityDescription] = []
-    if specs.get("supply_fans", 0):
-        descriptions.append(AIRFLOW_SENSORS[0])
-    if specs.get("extract_fans", 0):
-        descriptions.append(AIRFLOW_SENSORS[1])
-    return tuple(descriptions)
+    return tuple(desc for desc in AIRFLOW_SENSORS if specs.get(f"{desc.fan_side}_fans", 0))
 
 
 async def async_setup_entry(
@@ -664,7 +654,7 @@ class SystemairAirflowSensor(SystemairEntity, SensorEntity):
     def _airflow_context(self) -> tuple[float, float, str] | None:
         """Return fan output, reference maximum, and reference source."""
         profile = self.coordinator.config_entry.runtime_data.profile
-        specs = _model_specs(self.coordinator.config_entry.runtime_data.model, profile)
+        specs = resolve_model_specs(self.coordinator.config_entry.runtime_data.model, profile.model_aliases)
         power_registers = profile.power_registers
         if specs is None or power_registers is None:
             return None
@@ -745,7 +735,7 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
             return None
 
         model = self.coordinator.config_entry.runtime_data.model
-        specs = MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
+        specs = resolve_model_specs(model, profile.model_aliases)
         if not specs:
             return None
 
