@@ -121,7 +121,7 @@ class PowerCalculationTest(unittest.TestCase):
         }
         coordinator = FakeCoordinator("Single Fan Test", saf_pct=50, eaf_pct=100)
 
-        with patch("custom_components.systemair.sensor.MODEL_SPECS", specs):
+        with patch("custom_components.systemair.const.MODEL_SPECS", specs):
             for key, expected in SINGLE_FAN_EXPECTATIONS.items():
                 with self.subTest(key=key):
                     assert power_sensor(key, coordinator).native_value == expected  # noqa: S101

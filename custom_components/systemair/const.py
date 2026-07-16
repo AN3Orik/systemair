@@ -1,6 +1,8 @@
 """Constants for Systemair."""
 
+from collections.abc import Mapping
 from logging import Logger, getLogger
+from typing import Any
 
 LOGGER: Logger = getLogger(__package__)
 
@@ -16,6 +18,8 @@ CONF_WEB_API_MAX_REGISTERS = "web_api_max_registers"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_ENABLE_ALARM_DETAILS = "enable_alarm_details"
 CONF_ENABLE_ALARM_HISTORY = "enable_alarm_history"
+CONF_SUPPLY_AIRFLOW_MAX = "supply_airflow_max"
+CONF_EXTRACT_AIRFLOW_MAX = "extract_airflow_max"
 CONF_DEVICE_ID = "device_id"
 CONF_DEVICE_NAME = "device_name"
 DEFAULT_PORT = 502
@@ -66,9 +70,9 @@ SERIAL_STOPBITS = {
 
 # --- Power Specs for different models ---
 MODEL_SPECS = {
-    "VSC 100": {"fan_power": 27, "heater_power": 0, "supply_fans": 1, "extract_fans": 0, "max_airflow_m3h": 166},
-    "VSC 200": {"fan_power": 81, "heater_power": 0, "supply_fans": 1, "extract_fans": 0, "max_airflow_m3h": 333},
-    "VSC 300": {"fan_power": 115, "heater_power": 0, "supply_fans": 1, "extract_fans": 0, "max_airflow_m3h": 510},
+    "VSC 100": {"fan_power": 27, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 166},
+    "VSC 200": {"fan_power": 81, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 333},
+    "VSC 300": {"fan_power": 115, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 510},
     "VR 400 DCV/B": {"fan_power": 114, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 302},
     "VR 400 DC": {"fan_power": 115, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": None},
     "VR 400 DE": {"fan_power": 115, "heater_power": 1670, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 302},
@@ -121,6 +125,12 @@ MODEL_SPECS = {
     "VTR 700 L": {"fan_power": 340, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 951},
     "VTR 700 R": {"fan_power": 340, "heater_power": 0, "supply_fans": 1, "extract_fans": 1, "max_airflow_m3h": 951},
 }
+
+
+def resolve_model_specs(model: str, model_aliases: Mapping[str, str]) -> dict[str, Any] | None:
+    """Resolve model specifications through device-profile aliases."""
+    return MODEL_SPECS.get(model) or MODEL_SPECS.get(model_aliases.get(model, ""))
+
 
 # Constants from the old integration
 MAX_TEMP = 30
