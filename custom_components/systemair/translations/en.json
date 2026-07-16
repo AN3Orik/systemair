@@ -78,12 +78,16 @@
                 "title": "Systemair Settings",
                 "data": {
                     "model": "Ventilation Unit Model",
+                    "supply_airflow_max": "Installed maximum supply airflow",
+                    "extract_airflow_max": "Installed maximum extract airflow",
                     "update_interval": "Update Interval",
                     "web_api_max_registers": "Max registers per Web API request",
                     "enable_alarm_details": "Enable Alarm Details",
                     "enable_alarm_history": "Enable Alarm History"
                 },
                 "data_description": {
+                    "supply_airflow_max": "Optional maximum airflow for the installed supply duct system in m³/h. Leave empty to use the selected model's passport maximum.",
+                    "extract_airflow_max": "Optional maximum airflow for the installed extract duct system in m³/h. Leave empty to use the selected model's passport maximum.",
                     "update_interval": "How often to poll the device for updates. Range: 10-120 seconds.",
                     "web_api_max_registers": "Maximum number of registers to read in a single Web API request. Range: 30-125.",
                     "enable_alarm_details": "Enable fetching alarm details (increases Modbus load and may cause issues with SAVECONNECT 2.0)",
@@ -384,6 +388,12 @@
             },
             "summer_winter_state": {
                 "name": "Season Mode"
+            },
+            "supply_airflow": {
+                "name": "Supply Airflow"
+            },
+            "extract_airflow": {
+                "name": "Extract Airflow"
             },
             "supply_fan_power": {
                 "name": "Supply Fan Power"

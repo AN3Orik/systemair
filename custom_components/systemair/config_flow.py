@@ -6,7 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_IP_ADDRESS, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from homeassistant.const import CONF_HOST, CONF_IP_ADDRESS, CONF_PASSWORD, CONF_PORT, CONF_USERNAME, UnitOfVolumeFlowRate
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -33,11 +33,13 @@ from .const import (
     CONF_DEVICE_PROFILE,
     CONF_ENABLE_ALARM_DETAILS,
     CONF_ENABLE_ALARM_HISTORY,
+    CONF_EXTRACT_AIRFLOW_MAX,
     CONF_MODEL,
     CONF_PARITY,
     CONF_SERIAL_PORT,
     CONF_SLAVE_ID,
     CONF_STOPBITS,
+    CONF_SUPPLY_AIRFLOW_MAX,
     CONF_UPDATE_INTERVAL,
     CONF_WEB_API_MAX_REGISTERS,
     DEFAULT_BAUDRATE,
@@ -99,6 +101,29 @@ def _modbus_model_options() -> list[str]:
         for model in profile.model_options:
             options.setdefault(model, None)
     return list(options)
+
+
+def _airflow_calibration_suggestions(model: str, profile: Any, options: dict[str, Any]) -> dict[str, float]:
+    """Return per-side airflow values suggested by model data or saved options."""
+    specs = MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
+    if specs is None or (passport_max := specs.get("max_airflow_m3h")) is None:
+        return {}
+
+    suggestions: dict[str, float] = {}
+    if specs.get("supply_fans", 0):
+        suggestions[CONF_SUPPLY_AIRFLOW_MAX] = float(options.get(CONF_SUPPLY_AIRFLOW_MAX, passport_max))
+    if specs.get("extract_fans", 0):
+        suggestions[CONF_EXTRACT_AIRFLOW_MAX] = float(options.get(CONF_EXTRACT_AIRFLOW_MAX, passport_max))
+    return suggestions
+
+
+def _reset_airflow_calibration_on_model_change(user_input: dict[str, Any], current_model: str) -> dict[str, Any]:
+    """Remove calibration values when the selected unit model changes."""
+    normalized_input = dict(user_input)
+    if normalized_input.get(CONF_MODEL) != current_model:
+        normalized_input.pop(CONF_SUPPLY_AIRFLOW_MAX, None)
+        normalized_input.pop(CONF_EXTRACT_AIRFLOW_MAX, None)
+    return normalized_input
 
 
 def _profile_client_kwargs(profile_id: str) -> dict[str, Any]:
@@ -693,6 +718,8 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
+            current_model = self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, "VSR 300"))
+            user_input = _reset_airflow_calibration_on_model_change(user_input, current_model)
             # Update the integration title to match selected model
             new_model = user_input.get(CONF_MODEL)
             if new_model:
@@ -722,16 +749,29 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=10,
-                    max=120,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                    unit_of_measurement="s",
-                )
-            ),
         }
+
+        calibration_selector = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1,
+                max=5000,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+                unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
+            )
+        )
+        for option_key, suggested_value in _airflow_calibration_suggestions(default_model, profile, self.config_entry.options).items():
+            schema_dict[vol.Optional(option_key, description={"suggested_value": suggested_value})] = calibration_selector
+
+        schema_dict[vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval)] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=10,
+                max=120,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+                unit_of_measurement="s",
+            )
+        )
 
         # Web API specific options
         if api_type == API_TYPE_MODBUS_WEBAPI:

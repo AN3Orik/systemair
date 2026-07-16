@@ -21,11 +21,14 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
+    UnitOfVolumeFlowRate,
 )
 from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ENABLE_ALARM_HISTORY,
+    CONF_EXTRACT_AIRFLOW_MAX,
+    CONF_SUPPLY_AIRFLOW_MAX,
     DEFAULT_BASE_POWER,
     DEFAULT_ENABLE_ALARM_HISTORY,
     DEFAULT_FAN_POWER_EXPONENT,
@@ -122,6 +125,15 @@ DEFROSTING_STATE_MAP = {
 SUMMER_WINTER_STATE_MAP = {0: "Summer", 1: "Winter", 2: "Spring/Autumn"}
 
 
+def calculate_airflow(max_airflow_m3h: float | None, fan_output_percentage: float | None) -> int | None:
+    """Estimate whole-unit airflow from the live fan output percentage."""
+    if max_airflow_m3h is None or fan_output_percentage is None:
+        return None
+
+    output_percentage = min(max(float(fan_output_percentage), 0), 100)
+    return round(float(max_airflow_m3h) * output_percentage / 100)
+
+
 @dataclass(kw_only=True, frozen=True)
 class SystemairSensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair sensor entity."""
@@ -139,6 +151,13 @@ class SystemairEnergySensorEntityDescription(SensorEntityDescription):
     """Describes a Systemair energy sensor entity."""
 
     power_sensor_key: str
+
+
+@dataclass(kw_only=True, frozen=True)
+class SystemairAirflowSensorEntityDescription(SensorEntityDescription):
+    """Describes a calculated whole-unit airflow sensor."""
+
+    fan_side: str
 
 
 ENERGY_SENSORS: tuple[SystemairEnergySensorEntityDescription, ...] = (
@@ -189,6 +208,25 @@ POWER_SENSORS: tuple[SystemairPowerSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+)
+
+AIRFLOW_SENSORS: tuple[SystemairAirflowSensorEntityDescription, ...] = (
+    SystemairAirflowSensorEntityDescription(
+        key="supply_airflow",
+        translation_key="supply_airflow",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
+        state_class=SensorStateClass.MEASUREMENT,
+        fan_side="supply",
+    ),
+    SystemairAirflowSensorEntityDescription(
+        key="extract_airflow",
+        translation_key="extract_airflow",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
+        state_class=SensorStateClass.MEASUREMENT,
+        fan_side="extract",
     ),
 )
 
@@ -443,6 +481,25 @@ def _profile_sensor_descriptions(profile: DeviceProfile) -> tuple[SystemairSenso
     return tuple(descriptions)
 
 
+def _model_specs(model: str, profile: DeviceProfile) -> dict[str, Any] | None:
+    """Resolve model specifications through profile aliases."""
+    return MODEL_SPECS.get(model) or MODEL_SPECS.get(profile.model_aliases.get(model, ""))
+
+
+def airflow_sensor_descriptions(model: str, profile: DeviceProfile) -> tuple[SystemairAirflowSensorEntityDescription, ...]:
+    """Return airflow sensors supported by the selected unit model."""
+    specs = _model_specs(model, profile)
+    if specs is None or specs.get("max_airflow_m3h") is None or profile.power_registers is None:
+        return ()
+
+    descriptions: list[SystemairAirflowSensorEntityDescription] = []
+    if specs.get("supply_fans", 0):
+        descriptions.append(AIRFLOW_SENSORS[0])
+    if specs.get("extract_fans", 0):
+        descriptions.append(AIRFLOW_SENSORS[1])
+    return tuple(descriptions)
+
+
 async def async_setup_entry(
     _hass: HomeAssistant,
     entry: SystemairConfigEntry,
@@ -456,6 +513,10 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [*sensors]
 
     if profile.power_registers is not None:
+        airflow_sensors = [
+            SystemairAirflowSensor(coordinator=coordinator, entity_description=desc)
+            for desc in airflow_sensor_descriptions(entry.runtime_data.model, profile)
+        ]
         power_sensors_map = {desc.key: SystemairPowerSensor(coordinator=coordinator, entity_description=desc) for desc in POWER_SENSORS}
         power_sensors = list(power_sensors_map.values())
         energy_sensors = [
@@ -466,7 +527,7 @@ async def async_setup_entry(
             )
             for desc in ENERGY_SENSORS
         ]
-        entities.extend([*power_sensors, *energy_sensors])
+        entities.extend([*airflow_sensors, *power_sensors, *energy_sensors])
 
     async_add_entities(entities)
 
@@ -583,6 +644,78 @@ class SystemairSensor(SystemairEntity, SensorEntity):
             )
 
         return {"history": history}
+
+
+class SystemairAirflowSensor(SystemairEntity, SensorEntity):
+    """Calculated whole-unit airflow sensor."""
+
+    entity_description: SystemairAirflowSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: SystemairDataUpdateCoordinator,
+        entity_description: SystemairAirflowSensorEntityDescription,
+    ) -> None:
+        """Initialize the airflow sensor."""
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
+
+    def _airflow_context(self) -> tuple[float, float, str] | None:
+        """Return fan output, reference maximum, and reference source."""
+        profile = self.coordinator.config_entry.runtime_data.profile
+        specs = _model_specs(self.coordinator.config_entry.runtime_data.model, profile)
+        power_registers = profile.power_registers
+        if specs is None or power_registers is None:
+            return None
+
+        is_supply = self.entity_description.fan_side == "supply"
+        register_key = power_registers.supply_output if is_supply else power_registers.extract_output
+        register = profile.registry.get(register_key)
+        if register is None:
+            return None
+
+        fan_output = self.coordinator.get_modbus_data(register)
+        if fan_output is None:
+            return None
+
+        option_key = CONF_SUPPLY_AIRFLOW_MAX if is_supply else CONF_EXTRACT_AIRFLOW_MAX
+        calibrated_max = self.coordinator.config_entry.options.get(option_key)
+        passport_max = specs.get("max_airflow_m3h")
+        reference_max = calibrated_max if calibrated_max is not None else passport_max
+        if reference_max is None:
+            return None
+
+        output_percentage = min(max(float(fan_output), 0), 100)
+        reference_source = "calibrated" if calibrated_max is not None else "passport"
+        return output_percentage, float(reference_max), reference_source
+
+    @property
+    def available(self) -> bool:
+        """Return whether live output and a reference maximum are available."""
+        return super().available and self._airflow_context() is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the calculated whole-unit airflow."""
+        if self.coordinator.data is None or (context := self._airflow_context()) is None:
+            return None
+
+        output_percentage, reference_max, _reference_source = context
+        return calculate_airflow(reference_max, output_percentage)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, float | str]:
+        """Expose the live percentage and maximum used by the estimate."""
+        if (context := self._airflow_context()) is None:
+            return {}
+
+        output_percentage, reference_max, reference_source = context
+        return {
+            "fan_output_percentage": output_percentage,
+            "reference_max_airflow_m3h": reference_max,
+            "reference_source": reference_source,
+        }
 
 
 class SystemairPowerSensor(SystemairEntity, SensorEntity):
