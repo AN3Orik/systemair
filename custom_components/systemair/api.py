@@ -11,7 +11,7 @@ import aiohttp
 import async_timeout
 import orjson
 from pymodbus.client import AsyncModbusSerialClient, AsyncModbusTcpClient
-from pymodbus.exceptions import ConnectionException
+from pymodbus.exceptions import ConnectionException, ModbusIOException
 
 from .const import LOGGER
 from .modbus import ModbusParameter
@@ -259,7 +259,7 @@ class SystemairModbusClient(SystemairClientBase):
                 else:
                     self._raise_unrecoverable_modbus_error(result)
 
-            except (TimeoutError, ConnectionException, ModbusConnectionError) as e:
+            except (TimeoutError, ConnectionException, ModbusIOException, ModbusConnectionError) as e:
                 LOGGER.warning("Connection error during %s: %s. Attempting to reconnect...", request_type, e)
                 await self._close_connection()
                 await asyncio.sleep(1)
@@ -280,7 +280,7 @@ class SystemairModbusClient(SystemairClientBase):
                 try:
                     result = await self._execute_request(request_type, address, **kwargs)
                     future.set_result(result)
-                except (ModbusConnectionError, ValueError) as e:
+                except Exception as e:  # noqa: BLE001
                     future.set_exception(e)
                 finally:
                     self._request_queue.task_done()
@@ -502,7 +502,7 @@ class SystemairSerialClient(SystemairClientBase):
                 else:
                     self._raise_unrecoverable_modbus_error(result)
 
-            except (TimeoutError, ConnectionException, ModbusConnectionError) as e:
+            except (TimeoutError, ConnectionException, ModbusIOException, ModbusConnectionError) as e:
                 LOGGER.warning("Connection error during %s: %s. Attempting to reconnect...", request_type, e)
                 await self._close_connection()
                 await asyncio.sleep(delay)
@@ -523,7 +523,7 @@ class SystemairSerialClient(SystemairClientBase):
                 try:
                     result = await self._execute_request(request_type, address, **kwargs)
                     future.set_result(result)
-                except (ModbusConnectionError, ValueError) as e:
+                except Exception as e:  # noqa: BLE001
                     future.set_exception(e)
                 finally:
                     self._request_queue.task_done()
