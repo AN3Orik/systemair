@@ -373,7 +373,8 @@
                     "external_control": "External control",
                     "demand_control": "Demand control",
                     "week_schedule": "Week schedule",
-                    "configuration_fault": "Configuration fault"
+                    "configuration_fault": "Configuration fault",
+                    "auto_mode_not_configured": "Auto mode not configured"
                 }
             },
             "defrosting_state": {

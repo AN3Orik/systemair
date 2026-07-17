@@ -365,7 +365,8 @@
                     "external_control": "Внешнее управление",
                     "demand_control": "Управление по потребности",
                     "week_schedule": "Недельное расписание",
-                    "configuration_fault": "Ошибка конфигурации"
+                    "configuration_fault": "Ошибка конфигурации",
+                    "auto_mode_not_configured": "Автоматический режим не настроен"
                 }
             },
             "defrosting_state": {

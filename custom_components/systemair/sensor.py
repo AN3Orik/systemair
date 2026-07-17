@@ -44,6 +44,7 @@ from .modbus import (
 )
 from .profiles import DEVICE_PROFILE_SAVE
 from .profiles.entities import resolve_profile_entity_register
+from .systemair_api.utils.constants import UserModes
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
@@ -109,11 +110,14 @@ ALARM_STATE_TO_VALUE_MAP = {
 VALUE_MAP_TO_ALARM_STATE = {value: key for key, value in ALARM_STATE_TO_VALUE_MAP.items()}
 IAQ_LEVEL_MAP = {0: "Perfect", 1: "Good", 2: "Improving"}
 DEMAND_CONTROLLER_MAP = {0: "CO2", 1: "RH"}
+AUTO_MODE_CONFIGURATION_FAULT = 3
+AUTO_MODE_NOT_CONFIGURED = 4
 AUTO_MODE_SOURCE_MAP = {
     0: "External control",
     1: "Demand control",
     2: "Week schedule",
-    3: "Configuration fault",
+    AUTO_MODE_CONFIGURATION_FAULT: "Configuration fault",
+    AUTO_MODE_NOT_CONFIGURED: "Auto mode not configured",
 }
 DEFROSTING_STATE_MAP = {
     0: "Normal",
@@ -414,7 +418,7 @@ ENTITY_DESCRIPTIONS = (
         translation_key="auto_mode_source",
         icon="mdi:auto-mode",
         device_class=SensorDeviceClass.ENUM,
-        options=["External control", "Demand control", "Week schedule", "Configuration fault"],
+        options=list(AUTO_MODE_SOURCE_MAP.values()),
         registry=parameter_map["REG_DEMC_AUTO_MODE_SOURCE"],
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -567,6 +571,13 @@ class SystemairSensor(SystemairEntity, SensorEntity):
             return None
 
         int_value = int(value)
+
+        if key == "auto_mode_source" and int_value == AUTO_MODE_CONFIGURATION_FAULT:
+            profile = self.coordinator.config_entry.runtime_data.profile
+            user_mode_register = profile.registry.get("REG_USERMODE_MODE")
+            active_user_mode = self.coordinator.get_modbus_data(user_mode_register) if user_mode_register is not None else None
+            if active_user_mode is not None and int(active_user_mode) != UserModes.AUTO:
+                int_value = AUTO_MODE_NOT_CONFIGURED
 
         if value_map := self._KEY_TO_MAP.get(key):
             return value_map.get(int_value)
