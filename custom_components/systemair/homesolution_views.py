@@ -116,6 +116,8 @@ class HomeSolutionViewCatalog:
     max_routes: int = DEFAULT_MAX_VIEW_ROUTES
     _routes: list[str] = field(default_factory=list, init=False)
     _route_capabilities: dict[str, _HomeSolutionViewCapabilities] = field(default_factory=dict, init=False)
+    _route_refresh_order: dict[str, int] = field(default_factory=dict, init=False)
+    _refresh_sequence: int = field(default=0, init=False)
     _values: dict[int, Any] = field(default_factory=dict, init=False)
     _register_routes: dict[int, list[str]] = field(default_factory=dict, init=False)
     _writable_registers: set[int] = field(default_factory=set, init=False)
@@ -152,6 +154,8 @@ class HomeSolutionViewCatalog:
         """Recursively discover linked capability views and their initial values."""
         self._routes.clear()
         self._route_capabilities.clear()
+        self._route_refresh_order.clear()
+        self._refresh_sequence = 0
         self._values.clear()
         self._register_routes.clear()
         self._writable_registers.clear()
@@ -180,7 +184,7 @@ class HomeSolutionViewCatalog:
                     continue
                 successful_routes.add(route)
                 capabilities = _extract_view_capabilities(view)
-                self._route_capabilities[route] = capabilities
+                self._store_route_capabilities(route, capabilities)
                 for linked_route in sorted(capabilities.routes):
                     if linked_route not in queued and len(queued) < self.max_routes:
                         queued.add(linked_route)
@@ -213,7 +217,7 @@ class HomeSolutionViewCatalog:
                     continue
                 successful_routes.add(route)
                 capabilities = _extract_view_capabilities(view)
-                self._route_capabilities[route] = capabilities
+                self._store_route_capabilities(route, capabilities)
                 discovered_links.update(capabilities.routes)
 
         for route in sorted(discovered_links):
@@ -223,13 +227,24 @@ class HomeSolutionViewCatalog:
         self._rebuild_capabilities()
         return HomeSolutionRefreshResult(values=dict(self._values), errors=errors, successful_routes=frozenset(successful_routes))
 
+    def _store_route_capabilities(self, route: str, capabilities: _HomeSolutionViewCapabilities) -> None:
+        """Replace one route snapshot and record that it is newer than retained failures."""
+        self._refresh_sequence += 1
+        self._route_capabilities[route] = capabilities
+        self._route_refresh_order[route] = self._refresh_sequence
+
     def _rebuild_capabilities(self) -> None:
         """Rebuild aggregate indexes from authoritative per-route snapshots."""
         self._values.clear()
         self._register_routes.clear()
         self._writable_registers.clear()
         self._modbus_register_ids.clear()
-        for route in self._routes:
+        discovery_order = {route: index for index, route in enumerate(self._routes)}
+        routes_by_freshness = sorted(
+            self._routes,
+            key=lambda route: (self._route_refresh_order.get(route, -1), discovery_order[route]),
+        )
+        for route in routes_by_freshness:
             capabilities = self._route_capabilities.get(route)
             if capabilities is None:
                 continue
@@ -238,7 +253,7 @@ class HomeSolutionViewCatalog:
             for register_id in capabilities.register_ids:
                 self._register_routes.setdefault(register_id, []).append(route)
             for modbus_register, register_id in capabilities.modbus_register_ids.items():
-                self._modbus_register_ids.setdefault(modbus_register, register_id)
+                self._modbus_register_ids[modbus_register] = register_id
 
     def _batches(self, routes: Iterable[str]) -> Iterable[tuple[str, ...]]:
         """Yield stable route batches bounded for one GraphQL request."""

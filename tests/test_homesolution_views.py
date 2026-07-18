@@ -418,6 +418,43 @@ class HomeSolutionViewsTest(unittest.TestCase):
 
         assert catalog.routes_for_register(1) == ("/home", "/home/changeMode")
 
+    def test_fresh_duplicate_value_wins_when_another_owner_fails_to_refresh(self) -> None:
+        """A failed duplicate route cannot overwrite a value refreshed by another owner."""
+
+        class FakeAPI:
+            fail_change_mode = False
+
+            def fetch_device_views(self, _device_id: str, routes: tuple[str, ...]) -> HomeSolutionViewsResponse:
+                views = {
+                    route: {
+                        "children": [
+                            {
+                                "properties": {
+                                    "enabled": True,
+                                    "dataItem": {"id": 1, "value": 4 if self.fail_change_mode and route == "/home" else 1},
+                                }
+                            }
+                        ]
+                    }
+                    for route in routes
+                }
+                errors = {}
+                if self.fail_change_mode and "/home/changeMode" in routes:
+                    views["/home/changeMode"] = None
+                    errors["/home/changeMode"] = "temporary failure"
+                return HomeSolutionViewsResponse(views=views, errors=errors)
+
+        api = FakeAPI()
+        catalog = importlib.import_module("custom_components.systemair.homesolution_views").HomeSolutionViewCatalog(
+            seed_routes=("/home", "/home/changeMode")
+        )
+        catalog.discover(api, "device")
+        api.fail_change_mode = True
+
+        refreshed = catalog.refresh_routes(api, "device", ("/home", "/home/changeMode"))
+
+        assert refreshed.values[1] == 4
+
 
 if __name__ == "__main__":
     unittest.main()
