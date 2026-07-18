@@ -130,7 +130,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
         )
         await client.start()
 
-    update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    update_interval = (
+        DEFAULT_UPDATE_INTERVAL if api_type == API_TYPE_HOMESOLUTION else entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    )
     coordinator = SystemairDataUpdateCoordinator(
         hass=hass,
         client=client,
@@ -152,6 +154,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SystemairConfigEntry) ->
     if api_type == API_TYPE_MODBUS_WEBAPI:
         await coordinator.async_setup_webapi()
         await coordinator.async_config_entry_first_refresh()
+    elif api_type == API_TYPE_HOMESOLUTION:
+        coordinator.async_set_updated_data(client.unit)
     else:
         # For Modbus TCP, just start normal updates
         pass

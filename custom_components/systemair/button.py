@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from homeassistant.components.button import (
@@ -15,7 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import LOGGER
 from .entity import SystemairEntity
-from .modbus import parameter_map
+from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
 
 if TYPE_CHECKING:
@@ -26,12 +27,20 @@ if TYPE_CHECKING:
     from .data import SystemairConfigEntry
 
 
-ENTITY_DESCRIPTIONS = (
-    ButtonEntityDescription(
+@dataclass(kw_only=True, frozen=True)
+class SystemairButtonEntityDescription(ButtonEntityDescription):
+    """Describe a Systemair button and its target register."""
+
+    registry: ModbusParameter
+
+
+ENTITY_DESCRIPTIONS: tuple[SystemairButtonEntityDescription, ...] = (
+    SystemairButtonEntityDescription(
         key="reset_filter_timer",
         translation_key="reset_filter_timer",
         device_class=ButtonDeviceClass.RESTART,
         entity_category=EntityCategory.CONFIG,
+        registry=parameter_map["REG_FILTER_REPLACEMENT_TIME_L"],
     ),
 )
 
@@ -60,12 +69,17 @@ class SystemairButton(SystemairEntity, ButtonEntity):
     def __init__(
         self,
         coordinator: SystemairDataUpdateCoordinator,
-        entity_description: ButtonEntityDescription,
+        entity_description: SystemairButtonEntityDescription,
     ) -> None:
         """Initialize the button class."""
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
+
+    @property
+    def available(self) -> bool:
+        """Return whether filter reset is supported by the active transport."""
+        return super().available and self.coordinator.can_set_modbus_data_32bit(self.entity_description.registry)
 
     async def async_press(self) -> None:
         """Handle the button press."""
@@ -73,8 +87,7 @@ class SystemairButton(SystemairEntity, ButtonEntity):
             LOGGER.info("Resetting filter timer by writing current timestamp.")
             try:
                 device_timestamp = int(time.time()) + TIMESTAMP_CONSTANT
-                register = parameter_map["REG_FILTER_REPLACEMENT_TIME_L"]
-                await self.coordinator.async_set_modbus_data_32bit(register, device_timestamp)
+                await self.coordinator.async_set_modbus_data_32bit(self.entity_description.registry, device_timestamp)
             except Exception as exc:
                 LOGGER.error("Failed to reset filter timer: %s", exc)
                 raise HomeAssistantError from exc

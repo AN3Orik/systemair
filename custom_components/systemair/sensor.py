@@ -560,7 +560,9 @@ class SystemairSensor(SystemairEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         if self.entity_description.key == "alarm_history":
-            return self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY) and super().available
+            enabled = self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
+            has_history = not self._is_homesolution or self.coordinator.has_raw_register(alarm_log_registers[0]["id"])
+            return enabled and has_history and super().available
         return super().available
 
     @property
@@ -598,16 +600,21 @@ class SystemairSensor(SystemairEntity, SensorEntity):
         if not self.coordinator.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY):
             return None
 
-        # Alarm history not supported for HomeSolution yet
-        if self._is_homesolution:
-            return None
-
         first_log = alarm_log_registers[0]
-        alarm_id_reg = first_log["id"]
-        alarm_id = self.coordinator.data.get(str(alarm_id_reg - 1))
+        alarm_id = self._alarm_log_value(first_log["id"])
         if alarm_id is None or alarm_id == 0:
             return "No recent alarms"
         return ALARM_ID_TO_NAME_MAP.get(int(alarm_id), f"Unknown ID: {alarm_id}")
+
+    def _alarm_log_value(self, address_1based: int) -> int | None:
+        """Read and normalize one raw alarm-log field."""
+        value = self.coordinator.get_raw_register(address_1based)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -615,28 +622,23 @@ class SystemairSensor(SystemairEntity, SensorEntity):
         if self.entity_description.key != "alarm_history":
             return None
 
-        # Alarm history not supported for HomeSolution yet
-        if self._is_homesolution:
-            return {"history": []}
-
         if self.coordinator.data is None:
             return {"history": []}
 
         history = []
-        data = self.coordinator.data
 
         for log_regs in alarm_log_registers:
-            alarm_id = data.get(str(log_regs["id"] - 1))
+            alarm_id = self._alarm_log_value(log_regs["id"])
             if alarm_id is None or alarm_id == 0:
                 continue
 
-            state_val = data.get(str(log_regs["state"] - 1))
-            year = data.get(str(log_regs["year"] - 1))
-            month = data.get(str(log_regs["month"] - 1))
-            day = data.get(str(log_regs["day"] - 1))
-            hour = data.get(str(log_regs["hour"] - 1))
-            minute = data.get(str(log_regs["minute"] - 1))
-            second = data.get(str(log_regs["second"] - 1))
+            state_val = self._alarm_log_value(log_regs["state"])
+            year = self._alarm_log_value(log_regs["year"])
+            month = self._alarm_log_value(log_regs["month"])
+            day = self._alarm_log_value(log_regs["day"])
+            hour = self._alarm_log_value(log_regs["hour"])
+            minute = self._alarm_log_value(log_regs["minute"])
+            second = self._alarm_log_value(log_regs["second"])
 
             timestamp = "Unknown time"
             if all(v is not None for v in [year, month, day, hour, minute, second]):
@@ -742,6 +744,11 @@ class SystemairPowerSensor(SystemairEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
 
     @property
+    def available(self) -> bool:
+        """Return whether all inputs needed for the calculation are available."""
+        return super().available and self.native_value is not None
+
+    @property
     def native_value(self) -> float | None:
         """Return the calculated power consumption."""
         if self.coordinator.data is None:
@@ -818,6 +825,11 @@ class SystemairEnergySensor(SystemairEntity, RestoreSensor):
         self._power_sensor = power_sensor
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
         self._last_update: datetime | None = None
+
+    @property
+    def available(self) -> bool:
+        """Return whether the live power source is available."""
+        return super().available and self._power_sensor.available
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which provides long-term statistics."""

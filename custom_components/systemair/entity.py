@@ -54,7 +54,13 @@ class SystemairEntity(CoordinatorEntity[SystemairDataUpdateCoordinator]):
 
         # For HomeSolution, check if the client reports the device as available
         if self._is_homesolution and hasattr(self.coordinator.client, "available"):
-            return self.coordinator.client.available
+            if not self.coordinator.client.available:
+                return False
+            description = getattr(self, "entity_description", None)
+            registry = getattr(description, "registry", None)
+            if registry is not None:
+                return self.coordinator.has_modbus_data(registry)
+            return True
 
         # For other API types, use the default coordinator availability
         return super().available

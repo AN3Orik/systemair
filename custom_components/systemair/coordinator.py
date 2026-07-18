@@ -26,7 +26,7 @@ from .const import (
     LOGGER,
 )
 from .homesolution import SystemairHomeSolutionClient
-from .homesolution_mapping import HOMESOLUTION_MAPPING
+from .homesolution_mapping import resolve_homesolution_value
 from .modbus import IntegerType, parameter_map
 
 if TYPE_CHECKING:
@@ -91,13 +91,13 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if combine_with and combine_with not in self.modbus_parameters:
                 self.modbus_parameters.append(combine_with)
 
-    def get_modbus_data(self, register: ModbusParameter) -> float | bool:  # noqa: PLR0911, PLR0912
+    def get_modbus_data(self, register: ModbusParameter) -> float | bool | None:
         """Get the data for a Modbus register."""
         if self._is_webapi:
             self.register_modbus_parameters(register)
 
         if self.data is None:
-            return 0
+            return None if self._is_homesolution else 0
 
         if self._is_homesolution:
             # HomeSolution Logic
@@ -106,16 +106,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Fallback if for some reason it is a dict (should not happen with new logic)
                 pass
             else:
-                # It's a VentilationUnit object
-                mapper = HOMESOLUTION_MAPPING.get(register.short)
-                if mapper:
-                    val = mapper(self.data)
-                    if val is None:
-                        return None
-                    if register.boolean:
-                        return bool(val)
-                    return float(val)
-                return None
+                return resolve_homesolution_value(self.data, register)
 
         value = self.data.get(str(register.register - 1))
 
@@ -135,6 +126,40 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             value = -(65536 - value)
         return value / (register.scale_factor or 1)
 
+    def has_modbus_data(self, register: ModbusParameter) -> bool:
+        """Return whether the active transport exposes a register value."""
+        if not self._is_homesolution:
+            return True
+        return self.data is not None and not isinstance(self.data, dict) and resolve_homesolution_value(self.data, register) is not None
+
+    def get_raw_register(self, address_1based: int) -> Any | None:
+        """Read an unscaled SAVE register address from the active transport."""
+        if self.data is None:
+            return None
+        if self._is_homesolution and not isinstance(self.data, dict):
+            return self.data.get_raw_modbus_register(address_1based)
+        return self.data.get(str(address_1based - 1))
+
+    def has_raw_register(self, address_1based: int) -> bool:
+        """Return whether an unscaled SAVE address exists in current data."""
+        return self.get_raw_register(address_1based) is not None
+
+    def can_set_modbus_data(self, register: ModbusParameter) -> bool:
+        """Return whether the active transport can write this register."""
+        return not self._is_homesolution or self.client.can_write_register(register)
+
+    def can_set_modbus_data_32bit(self, register: ModbusParameter) -> bool:
+        """Return whether the active transport can write both halves of a value."""
+        return not self._is_homesolution or self.client.can_write_registers_32bit(register)
+
+    async def async_refresh_after_write(self) -> None:
+        """Publish cloud readback locally or refresh the active local transport."""
+        if self._is_homesolution:
+            if self.client.unit is not None:
+                self.async_set_updated_data(self.client.unit)
+            return
+        await self.async_request_refresh()
+
     async def set_modbus_data(self, register: ModbusParameter, value: Any) -> None:
         """Set the data for a Modbus register."""
         if register.boolean:
@@ -150,7 +175,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             await self.client.write_register(register.register, value_to_write)
-            await self.async_request_refresh()
+            await self.async_refresh_after_write()
         except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError) as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
         except (ModbusConnectionError, SystemairApiClientError) as exc:
@@ -161,7 +186,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set the data for a 32-bit Modbus register."""
         try:
             await self.client.write_registers_32bit(register.register, value)
-            await self.async_request_refresh()
+            await self.async_refresh_after_write()
         except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError) as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
         except (ModbusConnectionError, SystemairApiClientError) as exc:
@@ -171,7 +196,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def async_set_updated_data_from_ws(self) -> None:
         """Update data from WebSocket callback."""
         if self.client.unit:
-            self.async_set_updated_data(self.client.unit)
+            self.hass.loop.call_soon_threadsafe(self.async_set_updated_data, self.client.unit)
 
     async def async_setup_webapi(self) -> None:
         """Set up coordinator for WebAPI (get device info)."""

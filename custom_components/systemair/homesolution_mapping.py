@@ -13,9 +13,48 @@ from .const import (
     PRESET_MODE_REFRESH,
     PRESET_MODE_VACUUM_CLEANER,
 )
+from .modbus import IntegerType, ModbusParameter, parameters_list
 from .systemair_api.models.ventilation_unit import VentilationUnit
 from .systemair_api.utils.constants import UserModes
 from .systemair_api.utils.register_constants import RegisterConstants
+
+PARAMETER_BY_REGISTER = {parameter.register: parameter for parameter in parameters_list}
+
+HOMESOLUTION_REGISTER_ALIASES: dict[str, tuple[str, ...]] = {
+    "REG_USERMODE_MODE": ("REG_MAINBOARD_USERMODE_MODE_HMI",),
+    "REG_USERMODE_HMI_CHANGE_REQUEST": ("REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST",),
+    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": (
+        "REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",
+        "REG_MAINBOARD_SPEED_INDICATION_APP",
+    ),
+    "REG_ECO_FUNCTION_ACTIVE": ("REG_MAINBOARD_FUNCTION_ACTIVE_ECO_MODE",),
+    "REG_OUTPUT_Y1_ANALOG": ("REG_MAINBOARD_OUTPUT_AO1",),
+    "REG_OUTPUT_Y1_DIGITAL": ("REG_MAINBOARD_OUTPUT_DO1",),
+    "REG_OUTPUT_Y2_ANALOG": ("REG_MAINBOARD_OUTPUT_AO2",),
+    "REG_OUTPUT_Y2_DIGITAL": ("REG_MAINBOARD_OUTPUT_DO2",),
+    "REG_OUTPUT_Y1_Y3_ANALOG": ("REG_MAINBOARD_OUTPUT_AO3",),
+}
+
+HOMESOLUTION_WRITE_ALIASES: dict[str, tuple[str, ...]] = {
+    "REG_USERMODE_HMI_CHANGE_REQUEST": ("REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST",),
+    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": ("REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",),
+    "REG_FILTER_PERIOD": (
+        "REG_MAINBOARD_FILTER_PERIOD_SET",
+        "REG_MAINBOARD_FILTER_PERIOD",
+    ),
+}
+
+HOMESOLUTION_WRITE_CAPABILITY_ALIASES: dict[str, dict[str, str]] = {
+    "REG_USERMODE_HMI_CHANGE_REQUEST": {
+        "REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST": "REG_MAINBOARD_USERMODE_MODE_HMI",
+    },
+    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": {
+        "REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": "REG_MAINBOARD_SPEED_INDICATION_APP",
+    },
+    "REG_FILTER_PERIOD": {
+        "REG_MAINBOARD_FILTER_PERIOD_SET": "REG_MAINBOARD_FILTER_PERIOD",
+    },
+}
 
 # Map user modes to preset mode strings
 USER_MODE_TO_PRESET = {
@@ -48,13 +87,15 @@ PRESET_MODE_TO_VALUE_MAP = {
 }
 
 
-def _get_preset_mode_value(unit: VentilationUnit) -> int:
+def _get_preset_mode_value(unit: VentilationUnit) -> int | None:
     """Get the preset mode value (1-based index) from the unit's user mode."""
+    if unit.user_mode is None:
+        return None
     preset = USER_MODE_TO_PRESET.get(unit.user_mode)
-    return PRESET_MODE_TO_VALUE_MAP.get(preset, 2)  # Default to MANUAL (2) if unknown
+    return PRESET_MODE_TO_VALUE_MAP.get(preset)
 
 
-def _get_fan_mode_value(unit: VentilationUnit) -> int:
+def _get_fan_mode_value(unit: VentilationUnit) -> int | None:
     """Get fan mode value.
 
     In climate.py:
@@ -64,42 +105,188 @@ def _get_fan_mode_value(unit: VentilationUnit) -> int:
     FAN_HIGH: 4
     """  # noqa: D213
     if unit.airflow is None:
-        return 3  # Medium/Normal default
-
-    # Unit airflow is 1-5 (1=Off, 2=Low, 3=Normal, 4=High, 5=Max)
-    # We map to the values expected by climate.py entity
-    if unit.airflow == 1:
-        return 0  # Off
-    if unit.airflow == 2:  # noqa: PLR2004
-        return 2  # Low
-    if unit.airflow == 3:  # noqa: PLR2004
-        return 3  # Medium
-    if unit.airflow >= 4:  # noqa: PLR2004
-        return 4  # High
-    return 3
+        return None
+    return _speed_indication_to_save_fan_mode(unit.airflow)
 
 
-def _get_active_alarms_count(unit: VentilationUnit) -> int:
+def _speed_indication_to_save_fan_mode(value: Any) -> int | None:
+    """Map HomeSolution readback levels to the fan modes exposed by Climate."""
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        return None
+    if level == 0:
+        return 0
+    if level <= 2:  # noqa: PLR2004 -- Minimum and Low collapse to Low
+        return 2
+    if level == 3:  # noqa: PLR2004
+        return 3
+    return 4
+
+
+def _resolve_fan_mode_register(unit: VentilationUnit) -> float | None:
+    """Resolve the action/readback airflow enums to SAVE Climate values."""
+    if (readback := unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP)) is not None:
+        value = _speed_indication_to_save_fan_mode(readback)
+        return None if value is None else float(value)
+    if (action := unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)) is not None:
+        try:
+            return 0.0 if int(action) == 1 else float(action)
+        except (TypeError, ValueError):
+            return None
+    value = _get_fan_mode_value(unit)
+    return None if value is None else float(value)
+
+
+def _get_active_alarms_count(unit: VentilationUnit) -> int | None:
     """Count active alarms."""
-    if unit.active_alarms:
-        return 1
-    # Check individual alarm types if available
-    if unit.alarm_type_a or unit.alarm_type_b or unit.alarm_type_c:
-        return 1
-    return 0
+    alarm_types = (unit.alarm_type_a, unit.alarm_type_b, unit.alarm_type_c)
+    if any(value is not None for value in alarm_types):
+        return int(any(bool(value) for value in alarm_types))
+    if unit.active_alarms is not None:
+        return int(unit.active_alarms)
+    return None
 
 
-def _is_alarm_active(unit: VentilationUnit, _alarm_id: int) -> int:
+def _is_alarm_active(unit: VentilationUnit, _alarm_id: int) -> int | None:
     """Check if a specific alarm is active."""
     # This function is not currently used by the mapping logic directly,
     # as alarms are mapped to specific registers.
     # But for completeness, we can check if the unit has active alarms.
-    return 1 if unit.active_alarms else 0
+    return None if unit.active_alarms is None else int(unit.active_alarms)
+
+
+def _optional_flag(unit: VentilationUnit, register_id: int) -> int | None:
+    """Convert a present cloud flag to 0/1 without inventing an absent value."""
+    value = unit.registers.get(register_id)
+    return None if value is None else int(bool(value))
+
+
+def _remaining_filter_seconds(unit: VentilationUnit) -> int | None:
+    """Convert the HomeSolution filter remainder from days to seconds."""
+    value = unit.registers.get(RegisterConstants.REG_MAINBOARD_FILTER_REMAINING_TIME_L)
+    return None if value is None else int(value) * 24 * 3600
 
 
 def get_reg(unit: VentilationUnit, register_id: int, default: Any = None) -> Any:
     """Get register value safely."""
     return unit.registers.get(register_id, default)
+
+
+def homesolution_register_candidates(register: ModbusParameter) -> tuple[int, ...]:
+    """Return HomeSolution register IDs ordered by cloud relevance."""
+    members = RegisterConstants.__members__
+    names = list(HOMESOLUTION_REGISTER_ALIASES.get(register.short, ()))
+    if register.short.startswith("REG_"):
+        names.append(f"REG_MAINBOARD_{register.short[4:]}")
+    names.append(register.short)
+
+    candidates: list[int] = []
+    for name in names:
+        member = members.get(name)
+        if member is not None and member.value not in candidates:
+            candidates.append(member.value)
+    return tuple(candidates)
+
+
+def homesolution_write_candidates(register: ModbusParameter) -> tuple[int, ...]:
+    """Return possible cloud write targets in capability-preferred order."""
+    members = RegisterConstants.__members__
+    candidates: list[int] = []
+    for name in HOMESOLUTION_WRITE_ALIASES.get(register.short, ()):
+        member = members.get(name)
+        if member is not None and member.value not in candidates:
+            candidates.append(member.value)
+    for register_id in homesolution_register_candidates(register):
+        if register_id not in candidates:
+            candidates.append(register_id)
+    return tuple(candidates)
+
+
+def homesolution_write_capability_id(register: ModbusParameter, register_id: int) -> int:
+    """Return the visible data item which proves that a cloud action is supported."""
+    members = RegisterConstants.__members__
+    for target_name, capability_name in HOMESOLUTION_WRITE_CAPABILITY_ALIASES.get(register.short, {}).items():
+        target = members.get(target_name)
+        capability = members.get(capability_name)
+        if target is not None and capability is not None and target.value == register_id:
+            return capability.value
+    return register_id
+
+
+def encode_homesolution_write_value(register: ModbusParameter, value: int) -> int | str:
+    """Translate SAVE Modbus command values for a selected HomeSolution control."""
+    if register.boolean:
+        return "true" if value else "false"
+    if register.short == "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF" and value == 0:
+        return 1
+    return value
+
+
+def _raw_register_value(unit: VentilationUnit, register: ModbusParameter) -> Any | None:
+    """Return the first raw value exposed for a SAVE register."""
+    candidates = homesolution_register_candidates(register)
+    exact_member = RegisterConstants.__members__.get(register.short)
+    exact_register_id = exact_member.value if exact_member is not None else None
+    for register_id in candidates:
+        if register_id == exact_register_id:
+            continue
+        if register_id in unit.registers:
+            return unit.registers[register_id]
+    if register.register - 1 in unit.modbus_register_ids:
+        return unit.get_raw_modbus_register(register.register)
+    if (value := unit.get_raw_modbus_register(register.register)) is not None:
+        return value
+    if exact_register_id is not None and exact_register_id in unit.registers:
+        return unit.registers[exact_register_id]
+    return None
+
+
+def _decode_register_value(unit: VentilationUnit, register: ModbusParameter, raw_value: Any) -> float | bool | None:
+    """Decode a HomeSolution raw value with SAVE Modbus semantics."""
+    try:
+        value = int(float(raw_value))
+    except (TypeError, ValueError):
+        return None
+
+    if register.boolean:
+        return value != 0
+
+    if register.combine_with_32_bit is not None:
+        high_register = PARAMETER_BY_REGISTER.get(register.combine_with_32_bit)
+        if high_register is None or (high_raw := _raw_register_value(unit, high_register)) is None:
+            return None
+        try:
+            value += int(float(high_raw)) << 16
+        except (TypeError, ValueError):
+            return None
+
+    if register.sig == IntegerType.INT:
+        bit_width = 32 if register.combine_with_32_bit is not None else 16
+        if value >= 1 << (bit_width - 1):
+            value -= 1 << bit_width
+    return value / (register.scale_factor or 1)
+
+
+def resolve_homesolution_value(unit: VentilationUnit, register: ModbusParameter) -> float | bool | None:
+    """Resolve a SAVE register from cloud capabilities or a summary fallback."""
+    if register.short == "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF":
+        return _resolve_fan_mode_register(unit)
+
+    if (raw_value := _raw_register_value(unit, register)) is not None:
+        decoded = _decode_register_value(unit, register, raw_value)
+        if decoded is not None:
+            return decoded
+
+    fallback = HOMESOLUTION_MAPPING.get(register.short)
+    if fallback is None or (value := fallback(unit)) is None:
+        return None
+    if register.boolean:
+        return bool(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # Mapping from Modbus register short names to lambda functions extracting data from VentilationUnit
@@ -135,16 +322,8 @@ HOMESOLUTION_MAPPING = {
     # Operation Mode & Fan
     "REG_USERMODE_MODE": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI, unit.user_mode),
     "REG_USERMODE_HMI_CHANGE_REQUEST": _get_preset_mode_value,
-    "REG_OUTPUT_SAF": lambda unit: (
-        unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
-        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
-        else 0
-    ),
-    "REG_OUTPUT_EAF": lambda unit: (
-        unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow) * 20
-        if unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP, unit.airflow)
-        else 0
-    ),
+    "REG_OUTPUT_SAF": lambda _unit: None,
+    "REG_OUTPUT_EAF": lambda _unit: None,
     "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": _get_fan_mode_value,
     "REG_FAN_MANUAL_STOP_ALLOWED": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FAN_MANUAL_STOP_ALLOWED),
     "REG_SENSOR_RPM_SAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RPM_SAF),
@@ -152,8 +331,8 @@ HOMESOLUTION_MAPPING = {
     # Binary Sensors / Status
     "REG_FUNCTION_ACTIVE_HEATER": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_HEATING),
     "REG_FUNCTION_ACTIVE_COOLER": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_COOLING),
-    "REG_OUTPUT_TRIAC": lambda unit: 1 if unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_HEATING) else 0,
-    "REG_OUTPUT_Y3_DIGITAL": lambda unit: 1 if unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_COOLING) else 0,
+    "REG_OUTPUT_TRIAC": lambda unit: _optional_flag(unit, RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_HEATING),
+    "REG_OUTPUT_Y3_DIGITAL": lambda unit: _optional_flag(unit, RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_COOLING),
     "REG_FUNCTION_ACTIVE_HEAT_RECOVERY": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_HEAT_RECOVERY),
     "REG_FUNCTION_ACTIVE_FREE_COOLING": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_FREE_COOLING),
     "REG_FUNCTION_ACTIVE_DEFROSTING": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_DEFROSTING),
@@ -174,8 +353,8 @@ HOMESOLUTION_MAPPING = {
     "REG_ECO_FUNCTION_ACTIVE": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_ECO_MODE),
     "REG_PASSIVE_HOUSE_ACTIVATION": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_PASSIVE_HOUSE_ACTIVATION),
     # Filter
-    "REG_FILTER_REMAINING_TIME_L": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FILTER_REMAINING_TIME_L, 0) * 24 * 3600,
-    "REG_FILTER_PERIOD": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FILTER_PERIOD, 6),
+    "REG_FILTER_REMAINING_TIME_L": _remaining_filter_seconds,
+    "REG_FILTER_PERIOD": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FILTER_PERIOD),
     # Demand Control
     "REG_MAINBOARD_DEMC_RH_SETTINGS_ON_OFF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_DEMC_RH_SETTINGS_ON_OFF),
     "REG_MAINBOARD_DEMC_CO2_SETTINGS_ON_OFF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_DEMC_CO2_SETTINGS_ON_OFF),
@@ -187,7 +366,7 @@ HOMESOLUTION_MAPPING = {
     "REG_USERMODE_CROWDED_TIME": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_CROWDED_TIME),
     "REG_USERMODE_REMAINING_TIME_L": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_REMAINING_TIME_L),
     # Alarms
-    "REG_ALARM_HARDWARE_ERROR": lambda unit: 1 if _get_active_alarms_count(unit) > 0 else 0,
+    "REG_ALARM_HARDWARE_ERROR": _get_active_alarms_count,
     "REG_ALARM_SAF_CTRL_ALARM": lambda unit: get_reg(unit, RegisterConstants.REG_ALARM_SAF_CTRL_ALARM),
     "REG_ALARM_SAF_CTRL_CLEAR_ALARM": lambda unit: get_reg(unit, RegisterConstants.REG_ALARM_SAF_CTRL_CLEAR_ALARM),
     "REG_ALARM_SAF_CTRL_TIMESTAMP_L": lambda unit: get_reg(unit, RegisterConstants.REG_ALARM_SAF_CTRL_TIMESTAMP_L),
@@ -553,7 +732,7 @@ HOMESOLUTION_MAPPING = {
     "REG_SYSTEM_UNIT_MODEL1": lambda unit: get_reg(unit, RegisterConstants.REG_SYSTEM_UNIT_MODEL1),
     "REG_SYSTEM_SERIAL_NUMBER1": lambda unit: get_reg(unit, RegisterConstants.REG_SYSTEM_SERIAL_NUMBER1),
     # IAQ
-    "REG_IAQ_LEVEL": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_IAQ_LEVEL, getattr(unit, "iaq_level", 0)),
+    "REG_IAQ_LEVEL": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_IAQ_LEVEL, unit.air_quality),
     # CO2
-    "REG_SENSOR_MODBUS_CO2": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_CO2S, getattr(unit, "co2", 0)),
+    "REG_SENSOR_MODBUS_CO2": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_CO2S, unit.co2),
 }
