@@ -123,6 +123,9 @@
             "moisture_transfer_active": {
                 "name": "Moisture Transfer Active"
             },
+            "eco_function_active": {
+                "name": "Eco Function Active"
+            },
             "secondary_air_active": {
                 "name": "Secondary Air Active"
             },
@@ -131,6 +134,9 @@
             },
             "cooker_hood_active": {
                 "name": "Cooker Hood Active"
+            },
+            "pressure_guard_active": {
+                "name": "Pressure Guard Active"
             },
             "heating_active": {
                 "name": "Heating Active"
@@ -336,6 +342,9 @@
             },
             "heater_output_value": {
                 "name": "Heater output value"
+            },
+            "heat_exchanger_output": {
+                "name": "Heat exchanger output"
             },
             "heating_demand": {
                 "name": "Heating Demand"

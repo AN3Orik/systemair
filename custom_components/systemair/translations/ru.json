@@ -124,6 +124,9 @@
             "moisture_transfer_active": {
                 "name": "Перенос влаги активен"
             },
+            "eco_function_active": {
+                "name": "Функция ECO активна"
+            },
             "secondary_air_active": {
                 "name": "Вторичный воздух активен"
             },
@@ -132,6 +135,9 @@
             },
             "cooker_hood_active": {
                 "name": "Вытяжка активна"
+            },
+            "pressure_guard_active": {
+                "name": "Защита давления активна"
             },
             "heating_active": {
                 "name": "Нагрев активен"
@@ -328,6 +334,9 @@
             },
             "heater_output_value": {
                 "name": "Мощность нагревателя"
+            },
+            "heat_exchanger_output": {
+                "name": "Выход теплообменника"
             },
             "heating_demand": {
                 "name": "Требуемая мощность нагрева"

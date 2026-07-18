@@ -328,6 +328,13 @@ ENTITY_DESCRIPTIONS = (
         registry=parameter_map["REG_PWM_TRIAC_OUTPUT"],
     ),
     SystemairSensorEntityDescription(
+        key="heat_exchanger_output",
+        translation_key="heat_exchanger_output",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        registry=parameter_map["REG_OUTPUT_Y2_ANALOG"],
+    ),
+    SystemairSensorEntityDescription(
         key="heating_demand",
         translation_key="heating_demand",
         state_class=SensorStateClass.MEASUREMENT,

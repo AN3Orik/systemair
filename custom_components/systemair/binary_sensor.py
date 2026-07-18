@@ -30,6 +30,7 @@ class SystemairBinarySensorEntityDescription(BinarySensorEntityDescription):
     """Describes a Systemair binary sensor entity."""
 
     registry: ModbusParameter
+    active_value: int | None = None
 
 
 ENTITY_DESCRIPTIONS = (
@@ -76,6 +77,12 @@ ENTITY_DESCRIPTIONS = (
         registry=parameter_map["REG_FUNCTION_ACTIVE_MOISTURE_TRANSFER"],
     ),
     SystemairBinarySensorEntityDescription(
+        key="eco_function_active",
+        translation_key="eco_function_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_ECO_FUNCTION_ACTIVE"],
+    ),
+    SystemairBinarySensorEntityDescription(
         key="secondary_air_active",
         translation_key="secondary_air_active",
         device_class=BinarySensorDeviceClass.RUNNING,
@@ -92,6 +99,13 @@ ENTITY_DESCRIPTIONS = (
         translation_key="cooker_hood_active",
         device_class=BinarySensorDeviceClass.RUNNING,
         registry=parameter_map["REG_FUNCTION_ACTIVE_COOKER_HOOD"],
+    ),
+    SystemairBinarySensorEntityDescription(
+        key="pressure_guard_active",
+        translation_key="pressure_guard_active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        registry=parameter_map["REG_USERMODE_MODE"],
+        active_value=12,
     ),
     SystemairBinarySensorEntityDescription(
         key="heating_active",
@@ -214,4 +228,6 @@ class SystemairBinarySensor(SystemairEntity, BinarySensorEntity):
         val = self.coordinator.get_modbus_data(self.entity_description.registry)
         if val is None:
             return None
+        if self.entity_description.active_value is not None:
+            return val == self.entity_description.active_value
         return val != 0
