@@ -13,7 +13,7 @@ import requests
 
 from custom_components.systemair.systemair_api.api.systemair_api import HomeSolutionViewsResponse, SystemairAPI
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
-from custom_components.systemair.systemair_api.utils.exceptions import APIError
+from custom_components.systemair.systemair_api.utils.exceptions import APIError, AuthenticationError
 from custom_components.systemair.systemair_api.utils.register_constants import RegisterConstants
 
 
@@ -69,6 +69,22 @@ class HomeSolutionViewsTest(unittest.TestCase):
         assert unit.registers[RegisterConstants.REG_MAINBOARD_TC_SP] == 215
         assert unit.temperatures["setpoint"] == 21.5
 
+    def test_removed_temperature_capabilities_clear_summary_fields(self) -> None:
+        """A removed cloud capability cannot leave its previous temperature visible."""
+        unit = VentilationUnit("device", "Unit")
+        unit.update_register_values(
+            {
+                RegisterConstants.REG_MAINBOARD_TC_SP: 215,
+                RegisterConstants.REG_MAINBOARD_SENSOR_OAT: 50,
+            }
+        )
+
+        unit.replace_register_values({})
+
+        assert unit.registers == {}
+        assert unit.temperatures["setpoint"] is None
+        assert unit.temperatures["oat"] is None
+
     def test_text_capability_value_is_preserved_without_numeric_conversion(self) -> None:
         """Unmapped textual capabilities do not trigger eager temperature math."""
         unit = VentilationUnit("device", "Unit")
@@ -122,6 +138,21 @@ class HomeSolutionViewsTest(unittest.TestCase):
         ):
             api.fetch_device_views("device", ("/home",))
 
+    def test_batched_get_view_reports_expired_http_authentication(self) -> None:
+        """An invalid cloud token remains distinguishable from a transport failure."""
+        api = SystemairAPI.__new__(SystemairAPI)
+        api.headers = {"Authorization": "Bearer redacted"}
+        response = Mock()
+        response.status_code = 401
+        response.json.return_value = {"message": "Unauthorized"}
+        response.raise_for_status.side_effect = requests.HTTPError("unauthorized", response=response)
+
+        with (
+            patch("custom_components.systemair.systemair_api.api.systemair_api.requests.post", return_value=response),
+            self.assertRaises(AuthenticationError),  # noqa: PT027 -- suite intentionally uses unittest
+        ):
+            api.fetch_device_views("device", ("/home",))
+
     def test_write_data_items_sends_one_atomic_mutation(self) -> None:
         """A split SAVE value is written as one HomeSolution mutation."""
         api = SystemairAPI.__new__(SystemairAPI)
@@ -161,19 +192,33 @@ class HomeSolutionViewsTest(unittest.TestCase):
                         "children": [
                             {
                                 "properties": {
+                                    "enabled": True,
                                     "dataItem": {
                                         "id": 1,
                                         "value": 10,
                                         "readOnly": False,
                                         "extension": {"modbusRegister": 2000},
-                                    }
+                                    },
+                                }
+                            },
+                            {
+                                "properties": {
+                                    "enabled": False,
+                                    "dataItem": {
+                                        "id": 3,
+                                        "value": 30,
+                                        "readOnly": False,
+                                        "extension": {"modbusRegister": 2002},
+                                    },
                                 }
                             },
                             {"properties": {"route": "service"}},
                         ]
                     },
                     "/service": {"children": [{"properties": {"route": "service/output"}}]},
-                    "/service/output": {"children": [{"properties": {"rows": [{"dataItem": {"id": 2, "value": 20, "readOnly": True}}]}}]},
+                    "/service/output": {
+                        "children": [{"properties": {"rows": [{"enabled": True, "dataItem": {"id": 2, "value": 20, "readOnly": True}}]}}]
+                    },
                 }
                 return HomeSolutionViewsResponse(views={route: views.get(route) for route in routes}, errors={})
 
@@ -187,8 +232,10 @@ class HomeSolutionViewsTest(unittest.TestCase):
         assert catalog.route_for_register(1) == "/home"
         assert catalog.route_for_register(2) == "/service/output"
         assert catalog.register_id_for_modbus(2001) == 1
+        assert catalog.register_id_for_modbus(2003) is None
         assert catalog.is_register_writable(1) is True
         assert catalog.is_register_writable(2) is False
+        assert catalog.is_register_writable(3) is False
 
         api.calls.clear()
         refreshed = catalog.refresh(api, "device")
@@ -197,8 +244,130 @@ class HomeSolutionViewsTest(unittest.TestCase):
 
         api.calls.clear()
         refreshed = catalog.refresh_routes(api, "device", ("/service/output",))
-        assert refreshed.values == {2: 20}
+        assert refreshed.values == {1: 10, 2: 20}
         assert api.calls == [("/service/output",)]
+
+    def test_default_catalog_discovers_every_device_capability_root(self) -> None:
+        """Independent SAVE view trees participate in the same 60-second snapshot."""
+        expected_routes = (
+            "/home",
+            "/home/active_functions_home",
+            "/home/changeMode",
+            "/home/change_airflow",
+            "/home/change_temperature",
+            "/service",
+            "/alarms",
+            "/unit_information",
+            "/unit_monitoring",
+            "/week_schedule",
+            "/week_schedule/edit",
+            "/week_schedule/settings",
+        )
+
+        class FakeAPI:
+            @staticmethod
+            def fetch_device_views(_device_id: str, routes: tuple[str, ...]) -> HomeSolutionViewsResponse:
+                views = {
+                    route: {
+                        "children": [
+                            {
+                                "properties": {
+                                    "enabled": True,
+                                    "dataItem": {"id": index, "value": index, "readOnly": True},
+                                }
+                            }
+                        ]
+                    }
+                    for index, route in enumerate(expected_routes, start=1)
+                }
+                return HomeSolutionViewsResponse(views={route: views.get(route) for route in routes}, errors={})
+
+        catalog = importlib.import_module("custom_components.systemair.homesolution_views").HomeSolutionViewCatalog()
+
+        result = catalog.discover(FakeAPI(), "device")
+
+        assert catalog.routes == expected_routes
+        assert result.values == {index: index for index in range(1, len(expected_routes) + 1)}
+
+    def test_successful_route_refresh_replaces_removed_capabilities(self) -> None:
+        """Conditional controls stop being readable or writable as soon as their view disables them."""
+
+        class FakeAPI:
+            enabled = True
+
+            def fetch_device_views(self, _device_id: str, routes: tuple[str, ...]) -> HomeSolutionViewsResponse:
+                children = [
+                    {
+                        "properties": {
+                            "enabled": self.enabled,
+                            "dataItem": {
+                                "id": 1,
+                                "value": 10,
+                                "readOnly": False,
+                                "extension": {"modbusRegister": 2000},
+                            },
+                        }
+                    }
+                ]
+                if not self.enabled:
+                    children.append(
+                        {
+                            "properties": {
+                                "enabled": True,
+                                "dataItem": {
+                                    "id": 2,
+                                    "value": 20,
+                                    "readOnly": True,
+                                    "extension": {"modbusRegister": 2001},
+                                },
+                            }
+                        }
+                    )
+                return HomeSolutionViewsResponse(views={route: {"children": children} for route in routes}, errors={})
+
+        api = FakeAPI()
+        catalog = importlib.import_module("custom_components.systemair.homesolution_views").HomeSolutionViewCatalog(seed_routes=("/home",))
+        catalog.discover(api, "device")
+        api.enabled = False
+
+        refreshed = catalog.refresh(api, "device")
+
+        assert refreshed.values == {2: 20}
+        assert catalog.route_for_register(1) is None
+        assert catalog.is_register_writable(1) is False
+        assert catalog.register_id_for_modbus(2001) is None
+        assert catalog.register_id_for_modbus(2002) == 2
+
+    def test_catalog_skips_the_unit_software_update_action_view(self) -> None:
+        """The frontend-only update flow cannot break normal capability polling."""
+
+        class FakeAPI:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, ...]] = []
+
+            def fetch_device_views(self, _device_id: str, routes: tuple[str, ...]) -> HomeSolutionViewsResponse:
+                self.calls.append(routes)
+                return HomeSolutionViewsResponse(
+                    views={
+                        route: {
+                            "children": [{"properties": {"route": "unit_information/versions/update"}}]
+                            if route == "/unit_information"
+                            else []
+                        }
+                        for route in routes
+                    },
+                    errors={},
+                )
+
+        api = FakeAPI()
+        catalog = importlib.import_module("custom_components.systemair.homesolution_views").HomeSolutionViewCatalog(
+            seed_routes=("/unit_information",)
+        )
+
+        catalog.discover(api, "device")
+
+        assert catalog.routes == ("/unit_information",)
+        assert api.calls == [("/unit_information",)]
 
 
 if __name__ == "__main__":

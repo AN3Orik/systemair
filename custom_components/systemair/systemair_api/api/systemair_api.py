@@ -9,6 +9,7 @@ import requests
 from custom_components.systemair.systemair_api.utils.constants import APIEndpoints
 from custom_components.systemair.systemair_api.utils.exceptions import (
     APIError,
+    AuthenticationError,
     DeviceNotFoundError,
     DeviceOfflineError,
     RateLimitError,
@@ -82,6 +83,9 @@ class SystemairAPI:
                 response_data = response.json()
             except (ValueError, TypeError):
                 response_data = None
+            if response.status_code in {HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
+                auth_message = f"{message}: HTTP {response.status_code}"
+                raise AuthenticationError(auth_message) from err
             if device_id is not None and isinstance(response_data, dict) and response_data.get("name") == "DeviceOfflineError":
                 raise DeviceOfflineError(device_id, response_data.get("msg")) from err
             raise APIError(message, response.status_code, response_data if isinstance(response_data, dict) else None) from err

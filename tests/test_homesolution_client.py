@@ -14,7 +14,7 @@ from custom_components.systemair.homesolution import SystemairHomeSolutionClient
 from custom_components.systemair.homesolution_views import HomeSolutionRefreshResult
 from custom_components.systemair.modbus import parameter_map
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
-from custom_components.systemair.systemair_api.utils.exceptions import APIError
+from custom_components.systemair.systemair_api.utils.exceptions import APIError, AuthenticationError, RateLimitError
 from custom_components.systemair.systemair_api.utils.register_constants import RegisterConstants
 
 
@@ -43,6 +43,7 @@ class FakeCatalog:
         """Track refresh calls."""
         self.calls = 0
         self.route_refreshes: list[tuple[str, ...]] = []
+        self.modbus_register_ids = {parameter_map["REG_DEMC_RH_SETTINGS_SP_WINTER"].register - 1: 900}
 
     def refresh(self, _api: object, _device_id: str) -> HomeSolutionRefreshResult:
         """Return a complete refresh result."""
@@ -78,7 +79,7 @@ class FakeCatalog:
     def refresh_routes(self, _api: object, _device_id: str, routes: tuple[str, ...]) -> HomeSolutionRefreshResult:
         """Return the route refreshed immediately after a command."""
         self.route_refreshes.append(routes)
-        return HomeSolutionRefreshResult(values={29: 3, 31: 2}, errors={}, successful_routes=frozenset(routes))
+        return HomeSolutionRefreshResult(values={29: 3, 31: 2, 900: 50}, errors={}, successful_routes=frozenset(routes))
 
 
 class FailingPostWriteCatalog(FakeCatalog):
@@ -88,6 +89,42 @@ class FailingPostWriteCatalog(FakeCatalog):
         """Simulate a temporary device timeout after an accepted mutation."""
         msg = "Device request timed out"
         raise APIError(msg)
+
+
+class InvalidatedTokenCatalog(FakeCatalog):
+    """Reject the first request despite a locally unexpired token."""
+
+    def refresh(self, _api: object, _device_id: str) -> HomeSolutionRefreshResult:
+        """Succeed after the client rotates the server-rejected token."""
+        self.calls += 1
+        if self.calls == 1:
+            msg = "expired by server"
+            raise AuthenticationError(msg)
+        return HomeSolutionRefreshResult(values={29: 3}, errors={}, successful_routes=frozenset({"/home"}))
+
+
+class RotatableFakeAuthenticator(FakeAuthenticator):
+    """Expose one refresh-token rotation to the client."""
+
+    def __init__(self) -> None:
+        """Track token rotations."""
+        self.access_token = "old-token"
+        self.refresh_calls = 0
+
+    def refresh_access_token(self) -> str:
+        """Rotate the token even though its local expiry has not elapsed."""
+        self.refresh_calls += 1
+        self.access_token = "new-token"
+        return self.access_token
+
+
+class RateLimitedCatalog(FakeCatalog):
+    """Return an explicit cloud cooldown on the first poll."""
+
+    def refresh(self, _api: object, _device_id: str) -> HomeSolutionRefreshResult:
+        """Reject polling until the advertised retry window elapses."""
+        self.calls += 1
+        raise RateLimitError(retry_after=120)
 
 
 class HomeSolutionClientTest(unittest.TestCase):
@@ -109,6 +146,58 @@ class HomeSolutionClientTest(unittest.TestCase):
         assert client._view_catalog.calls == 1
         assert unit.registers[29] == 3
         assert unit.registers[31] == 4
+        assert client.available is True
+
+    def test_refresh_replaces_the_previous_capability_snapshot(self) -> None:
+        """Registers and Modbus metadata removed by the cloud become unavailable."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.unit = VentilationUnit("device", "Unit")
+        client._view_catalog = SimpleNamespace(modbus_register_ids={2000: 1, 2001: 2})
+        client._merge_refresh_values({1: 10, 2: 20})
+        client._view_catalog.modbus_register_ids = {2001: 2}
+
+        client._merge_refresh_values({2: 21})
+
+        assert client.unit.registers == {2: 21}
+        assert client.unit.modbus_register_ids == {2001: 2}
+
+    def test_server_rejected_token_is_rotated_and_request_retried(self) -> None:
+        """A 401 with a locally valid JWT recovers without waiting for its expiry."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.authenticator = RotatableFakeAuthenticator()
+        client.api = Mock()
+        client.websocket = object()
+        client.unit = VentilationUnit("device", "Unit")
+        client._view_catalog = InvalidatedTokenCatalog()
+        client._available = True
+
+        with patch.object(client, "_reconnect_websocket", new=AsyncMock()) as reconnect:
+            unit = asyncio.run(client.get_all_data())
+
+        assert unit.registers[29] == 3
+        assert client._view_catalog.calls == 2
+        assert client.authenticator.refresh_calls == 1
+        client.api.update_token.assert_called_once_with("new-token")
+        reconnect.assert_awaited_once()
+
+    def test_rate_limit_serves_cached_snapshot_until_retry_after(self) -> None:
+        """A cloud 429 neither hammers the API nor makes cached entities unavailable."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.authenticator = FakeAuthenticator()
+        client.api = object()
+        client.websocket = object()
+        client.unit = VentilationUnit("device", "Unit")
+        client.unit.update_register_values({29: 3})
+        client._view_catalog = RateLimitedCatalog()
+        client._available = True
+
+        with self.assertLogs("custom_components.systemair.homesolution", level="WARNING"):
+            first = asyncio.run(client.get_all_data())
+            second = asyncio.run(client.get_all_data())
+
+        assert first is client.unit
+        assert second is client.unit
+        assert client._view_catalog.calls == 1
         assert client.available is True
 
     def test_start_discovers_views_before_websocket(self) -> None:

@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Callable
+from time import monotonic
+from typing import Any, NoReturn
 
 from .api import SystemairApiClientError, SystemairAuthExpiredError, SystemairClientBase
 from .homesolution_mapping import (
@@ -17,13 +19,14 @@ from .modbus import ModbusParameter
 from .systemair_api import SystemairAPI, SystemairAuthenticator
 from .systemair_api.api.websocket_client import SystemairWebSocket
 from .systemair_api.models.ventilation_unit import VentilationUnit
-from .systemair_api.utils.exceptions import AuthenticationError, DeviceOfflineError, SystemairError, TokenRefreshError
+from .systemair_api.utils.exceptions import AuthenticationError, DeviceOfflineError, RateLimitError, SystemairError, TokenRefreshError
 
 _LOGGER = logging.getLogger(__name__)
 
 # Number of consecutive auth failures (refresh + full re-login) tolerated before
 # we surface the error to Home Assistant and trigger the reauth flow.
 AUTH_FAILURE_THRESHOLD = 20
+DEFAULT_RATE_LIMIT_COOLDOWN = 60
 
 
 class SystemairHomeSolutionClient(SystemairClientBase):
@@ -43,11 +46,12 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         self._auth_failure_count = 0
         self._view_catalog = HomeSolutionViewCatalog()
         self._poll_lock = asyncio.Lock()
+        self._rate_limit_until = 0.0
 
     def _merge_refresh_values(self, values: dict[int, Any]) -> None:
-        """Merge discovered address metadata and the latest cloud values."""
-        self.unit.update_modbus_register_map(getattr(self._view_catalog, "modbus_register_ids", {}))
-        self.unit.update_register_values(values)
+        """Replace discovered address metadata and cloud capability values."""
+        self.unit.replace_modbus_register_map(getattr(self._view_catalog, "modbus_register_ids", {}))
+        self.unit.replace_register_values(values)
 
     async def test_connection(self) -> bool:
         """
@@ -111,7 +115,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             except Exception as e:  # noqa: BLE001
                 _LOGGER.warning("Failed to disconnect WebSocket: %s", e)
 
-    async def _ensure_authenticated(self) -> bool:
+    async def _ensure_authenticated(self, *, force: bool = False) -> bool:
         """
         Ensure we have a valid access token.
 
@@ -120,8 +124,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         full re-authentication using the stored credentials if the refresh token
         has been invalidated server-side, avoiding a Home Assistant reauth prompt.
         """
-        if self.authenticator.is_token_valid():
-            self._auth_failure_count = 0
+        if not force and self.authenticator.is_token_valid():
             return False
 
         try:
@@ -135,7 +138,6 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             )
             await asyncio.to_thread(self.authenticator.authenticate)
 
-        self._auth_failure_count = 0
         return True
 
     async def _reconnect_websocket(self) -> None:
@@ -154,11 +156,54 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
             self.websocket = None
 
-    async def _prepare_api_request(self) -> None:
+    async def _prepare_api_request(self, *, force: bool = False) -> None:
         """Refresh the HTTP token and dependent WebSocket when necessary."""
-        if await self._ensure_authenticated():
+        if await self._ensure_authenticated(force=force):
             self.api.update_token(self.authenticator.access_token)
             await self._reconnect_websocket()
+
+    async def _execute_api_request(self, operation: Callable[[], Any]) -> Any:
+        """Execute one cloud request, rotating a server-rejected token once."""
+        remaining_cooldown = self._rate_limit_until - monotonic()
+        if remaining_cooldown > 0:
+            raise RateLimitError(retry_after=max(1, int(remaining_cooldown)))
+        await self._prepare_api_request()
+        try:
+            try:
+                result = await asyncio.to_thread(operation)
+            except AuthenticationError:
+                await self._prepare_api_request(force=True)
+                result = await asyncio.to_thread(operation)
+        except RateLimitError as err:
+            retry_after = err.retry_after or DEFAULT_RATE_LIMIT_COOLDOWN
+            self._rate_limit_until = max(self._rate_limit_until, monotonic() + retry_after)
+            raise
+        self._auth_failure_count = 0
+        self._rate_limit_until = 0.0
+        return result
+
+    def _raise_authentication_failure(self, err: AuthenticationError) -> NoReturn:
+        """Count a failed token recovery and eventually request Home Assistant reauth."""
+        self._available = False
+        self._auth_failure_count += 1
+        if self._auth_failure_count >= AUTH_FAILURE_THRESHOLD:
+            _LOGGER.exception(
+                "Authentication failed %d times in a row for device %s; surfacing reauth",
+                self._auth_failure_count,
+                self.device_id,
+            )
+            msg = f"Authentication failed {self._auth_failure_count} times: {err}"
+            raise SystemairAuthExpiredError(msg) from err
+
+        _LOGGER.warning(
+            "Authentication failed for device %s (attempt %d/%d): %s",
+            self.device_id,
+            self._auth_failure_count,
+            AUTH_FAILURE_THRESHOLD,
+            err,
+        )
+        msg = f"Authentication failed (attempt {self._auth_failure_count}/{AUTH_FAILURE_THRESHOLD}): {err}"
+        raise SystemairApiClientError(msg) from err
 
     async def get_all_data(
         self,
@@ -167,6 +212,9 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         _enable_alarm_history: bool = False,
     ) -> VentilationUnit:
         """Get all data."""
+        if self._rate_limit_until > monotonic() and self.unit is not None and self.unit.registers:
+            return self.unit
+
         try:
             await self._prepare_api_request()
             if self.websocket is None:
@@ -174,26 +222,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                 # Re-open it so real-time updates resume without waiting for a token rotation.
                 await self._reconnect_websocket()
         except AuthenticationError as err:
-            self._available = False
-            self._auth_failure_count += 1
-            if self._auth_failure_count >= AUTH_FAILURE_THRESHOLD:
-                _LOGGER.exception(
-                    "Authentication failed %d times in a row for device %s; surfacing reauth",
-                    self._auth_failure_count,
-                    self.device_id,
-                )
-                msg = f"Authentication failed {self._auth_failure_count} times: {err}"
-                raise SystemairAuthExpiredError(msg) from err
-
-            _LOGGER.warning(
-                "Authentication failed for device %s (attempt %d/%d): %s",
-                self.device_id,
-                self._auth_failure_count,
-                AUTH_FAILURE_THRESHOLD,
-                err,
-            )
-            msg = f"Authentication failed (attempt {self._auth_failure_count}/{AUTH_FAILURE_THRESHOLD}): {err}"
-            raise SystemairApiClientError(msg) from err
+            self._raise_authentication_failure(err)
 
         # We can rely on WebSocket updates, but a periodic poll ensures consistency
         if self.unit is None:
@@ -202,7 +231,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
 
         try:
             async with self._poll_lock:
-                result = await asyncio.to_thread(self._view_catalog.refresh, self.api, self.device_id)
+                result = await self._execute_api_request(lambda: self._view_catalog.refresh(self.api, self.device_id))
                 if result.successful_routes:
                     self._merge_refresh_values(result.values)
                     self._available = True
@@ -216,6 +245,19 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                         len(result.errors),
                         self.device_id,
                     )
+        except RateLimitError as err:
+            if self.unit.registers:
+                _LOGGER.warning(
+                    "HomeSolution rate limit reached for device %s; serving the cached snapshot for %d seconds",
+                    self.device_id,
+                    err.retry_after or DEFAULT_RATE_LIMIT_COOLDOWN,
+                )
+                return self.unit
+            self._available = False
+            msg = f"HomeSolution refresh rate limited: {err}"
+            raise SystemairApiClientError(msg) from err
+        except AuthenticationError as err:
+            self._raise_authentication_failure(err)
         except SystemairError as err:
             self._available = False
             msg = f"HomeSolution refresh failed: {err}"
@@ -263,7 +305,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
 
         try:
             async with self._poll_lock:
-                result = await asyncio.to_thread(self._view_catalog.refresh_routes, self.api, self.device_id, routes)
+                result = await self._execute_api_request(lambda: self._view_catalog.refresh_routes(self.api, self.device_id, routes))
                 if result.successful_routes:
                     self._merge_refresh_values(result.values)
                     self._available = True
@@ -293,8 +335,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         target, capability = write_target
         encoded_value = encode_homesolution_write_value(parameter, value)
         try:
-            await self._prepare_api_request()
-            success = await asyncio.to_thread(self.unit.set_value, self.api, target, encoded_value, _noprint=True)
+            success = await self._execute_api_request(lambda: self.unit.set_value(self.api, target, encoded_value, _noprint=True))
             if not success:
                 msg = f"HomeSolution rejected write to register {register}"
                 raise SystemairApiClientError(msg)
@@ -328,14 +369,14 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         high_target, high_capability = high_write_target
 
         try:
-            await self._prepare_api_request()
-            result = await asyncio.to_thread(
-                self.api.write_data_items,
-                self.device_id,
-                (
-                    (low_target, value & 0xFFFF),
-                    (high_target, (value >> 16) & 0xFFFF),
-                ),
+            result = await self._execute_api_request(
+                lambda: self.api.write_data_items(
+                    self.device_id,
+                    (
+                        (low_target, value & 0xFFFF),
+                        (high_target, (value >> 16) & 0xFFFF),
+                    ),
+                )
             )
             if not result.get("data", {}).get("WriteDataItems"):
                 msg = f"HomeSolution rejected 32-bit write to register {address_1based}"

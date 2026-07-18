@@ -9,7 +9,22 @@ from typing import TYPE_CHECKING, Any, Protocol
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-DEFAULT_VIEW_ROUTES = ("/home", "/service", "/alarms")
+CAPABILITY_VIEW_ROOTS = ("/home", "/service", "/alarms", "/unit_information", "/unit_monitoring", "/week_schedule")
+DEFAULT_VIEW_ROUTES = (
+    "/home",
+    "/home/active_functions_home",
+    "/home/changeMode",
+    "/home/change_airflow",
+    "/home/change_temperature",
+    "/service",
+    "/alarms",
+    "/unit_information",
+    "/unit_monitoring",
+    "/week_schedule",
+    "/week_schedule/edit",
+    "/week_schedule/settings",
+)
+NON_CAPABILITY_VIEW_ROUTES = frozenset({"/unit_information/versions/update"})
 DEFAULT_VIEW_BATCH_SIZE = 10
 DEFAULT_MAX_VIEW_ROUTES = 220
 
@@ -30,6 +45,17 @@ class HomeSolutionRefreshResult:
     successful_routes: frozenset[str]
 
 
+@dataclass(frozen=True)
+class _HomeSolutionViewCapabilities:
+    """Capability snapshot returned by one successful view request."""
+
+    values: dict[int, Any]
+    routes: set[str]
+    register_ids: set[int]
+    writable_registers: set[int]
+    modbus_register_ids: dict[int, int]
+
+
 def normalize_view_route(route: Any) -> str | None:
     """Normalize a linked HomeSolution route and reject unrelated navigation."""
     if not isinstance(route, str) or not route.strip():
@@ -37,20 +63,18 @@ def normalize_view_route(route: Any) -> str | None:
     normalized = route.strip()
     if not normalized.startswith("/"):
         normalized = f"/{normalized}"
-    if normalized in {"/home", "/service"} or normalized.startswith("/service/"):
-        return normalized
-    if normalized == "/alarms" or normalized.startswith("/alarms/"):
-        return normalized
-    return None
+    if normalized in NON_CAPABILITY_VIEW_ROUTES:
+        return None
+    return normalized if any(normalized == root or normalized.startswith(f"{root}/") for root in CAPABILITY_VIEW_ROOTS) else None
 
 
 def extract_view_data(view: Any) -> tuple[dict[int, Any], set[str]]:
     """Extract register values and linked routes from an arbitrarily nested view."""
-    values, routes, _register_ids, _writable_registers, _modbus_register_ids = _extract_view_capabilities(view)
-    return values, routes
+    capabilities = _extract_view_capabilities(view)
+    return capabilities.values, capabilities.routes
 
 
-def _extract_view_capabilities(view: Any) -> tuple[dict[int, Any], set[str], set[int], set[int], dict[int, int]]:
+def _extract_view_capabilities(view: Any) -> _HomeSolutionViewCapabilities:
     """Extract values, links, and writable data-item capabilities from a view."""
     values: dict[int, Any] = {}
     routes: set[str] = set()
@@ -61,7 +85,7 @@ def _extract_view_capabilities(view: Any) -> tuple[dict[int, Any], set[str], set
     def walk(node: Any) -> None:
         if isinstance(node, dict):
             data_item = node.get("dataItem")
-            if isinstance(data_item, dict) and isinstance(data_item.get("id"), int):
+            if isinstance(data_item, dict) and isinstance(data_item.get("id"), int) and node.get("enabled") is not False:
                 register_id = data_item["id"]
                 register_ids.add(register_id)
                 if "value" in data_item:
@@ -80,7 +104,7 @@ def _extract_view_capabilities(view: Any) -> tuple[dict[int, Any], set[str], set
                 walk(child)
 
     walk(view)
-    return values, routes, register_ids, writable_registers, modbus_register_ids
+    return _HomeSolutionViewCapabilities(values, routes, register_ids, writable_registers, modbus_register_ids)
 
 
 @dataclass
@@ -91,6 +115,8 @@ class HomeSolutionViewCatalog:
     batch_size: int = DEFAULT_VIEW_BATCH_SIZE
     max_routes: int = DEFAULT_MAX_VIEW_ROUTES
     _routes: list[str] = field(default_factory=list, init=False)
+    _route_capabilities: dict[str, _HomeSolutionViewCapabilities] = field(default_factory=dict, init=False)
+    _values: dict[int, Any] = field(default_factory=dict, init=False)
     _register_routes: dict[int, str] = field(default_factory=dict, init=False)
     _writable_registers: set[int] = field(default_factory=set, init=False)
     _modbus_register_ids: dict[int, int] = field(default_factory=dict, init=False)
@@ -120,12 +146,13 @@ class HomeSolutionViewCatalog:
     def discover(self, api: HomeSolutionViewsAPI, device_id: str) -> HomeSolutionRefreshResult:
         """Recursively discover linked capability views and their initial values."""
         self._routes.clear()
+        self._route_capabilities.clear()
+        self._values.clear()
         self._register_routes.clear()
         self._writable_registers.clear()
         self._modbus_register_ids.clear()
         pending = deque(filter(None, (normalize_view_route(route) for route in self.seed_routes)))
         queued = set(pending)
-        values: dict[int, Any] = {}
         errors: dict[str, str] = {}
         successful_routes: set[str] = set()
 
@@ -147,19 +174,15 @@ class HomeSolutionViewCatalog:
                 if view is None:
                     continue
                 successful_routes.add(route)
-                view_values, linked_routes, register_ids, writable_registers, modbus_register_ids = _extract_view_capabilities(view)
-                values.update(view_values)
-                self._writable_registers.update(writable_registers)
-                for modbus_register, register_id in modbus_register_ids.items():
-                    self._modbus_register_ids.setdefault(modbus_register, register_id)
-                for register_id in register_ids:
-                    self._register_routes.setdefault(register_id, route)
-                for linked_route in sorted(linked_routes):
+                capabilities = _extract_view_capabilities(view)
+                self._route_capabilities[route] = capabilities
+                for linked_route in sorted(capabilities.routes):
                     if linked_route not in queued and len(queued) < self.max_routes:
                         queued.add(linked_route)
                         pending.append(linked_route)
 
-        return HomeSolutionRefreshResult(values=values, errors=errors, successful_routes=frozenset(successful_routes))
+        self._rebuild_capabilities()
+        return HomeSolutionRefreshResult(values=dict(self._values), errors=errors, successful_routes=frozenset(successful_routes))
 
     def refresh(self, api: HomeSolutionViewsAPI, device_id: str) -> HomeSolutionRefreshResult:
         """Refresh every discovered view once."""
@@ -172,7 +195,6 @@ class HomeSolutionViewCatalog:
         routes: Iterable[str],
     ) -> HomeSolutionRefreshResult:
         """Refresh a selected set of discovered routes."""
-        values: dict[int, Any] = {}
         errors: dict[str, str] = {}
         successful_routes: set[str] = set()
         discovered_links: set[str] = set()
@@ -185,20 +207,33 @@ class HomeSolutionViewCatalog:
                 if view is None:
                     continue
                 successful_routes.add(route)
-                view_values, linked_routes, register_ids, writable_registers, modbus_register_ids = _extract_view_capabilities(view)
-                values.update(view_values)
-                discovered_links.update(linked_routes)
-                self._writable_registers.update(writable_registers)
-                for modbus_register, register_id in modbus_register_ids.items():
-                    self._modbus_register_ids.setdefault(modbus_register, register_id)
-                for register_id in register_ids:
-                    self._register_routes.setdefault(register_id, route)
+                capabilities = _extract_view_capabilities(view)
+                self._route_capabilities[route] = capabilities
+                discovered_links.update(capabilities.routes)
 
         for route in sorted(discovered_links):
             if route not in self._routes and len(self._routes) < self.max_routes:
                 self._routes.append(route)
 
-        return HomeSolutionRefreshResult(values=values, errors=errors, successful_routes=frozenset(successful_routes))
+        self._rebuild_capabilities()
+        return HomeSolutionRefreshResult(values=dict(self._values), errors=errors, successful_routes=frozenset(successful_routes))
+
+    def _rebuild_capabilities(self) -> None:
+        """Rebuild aggregate indexes from authoritative per-route snapshots."""
+        self._values.clear()
+        self._register_routes.clear()
+        self._writable_registers.clear()
+        self._modbus_register_ids.clear()
+        for route in self._routes:
+            capabilities = self._route_capabilities.get(route)
+            if capabilities is None:
+                continue
+            self._values.update(capabilities.values)
+            self._writable_registers.update(capabilities.writable_registers)
+            for register_id in capabilities.register_ids:
+                self._register_routes.setdefault(register_id, route)
+            for modbus_register, register_id in capabilities.modbus_register_ids.items():
+                self._modbus_register_ids.setdefault(modbus_register, register_id)
 
     def _batches(self, routes: Iterable[str]) -> Iterable[tuple[str, ...]]:
         """Yield stable route batches bounded for one GraphQL request."""

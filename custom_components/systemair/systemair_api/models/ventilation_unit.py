@@ -87,9 +87,20 @@ class VentilationUnit:
         for register_id, value in values.items():
             self._update_attribute({"id": register_id, "value": value})
 
+    def replace_register_values(self, values: dict[int, Any]) -> None:
+        """Replace the authoritative HomeSolution register snapshot."""
+        for register_id in self.registers.keys() - values.keys():
+            self._update_attribute({"id": register_id, "value": None})
+            self.registers.pop(register_id, None)
+        self.update_register_values(values)
+
     def update_modbus_register_map(self, register_ids: dict[int, int]) -> None:
         """Merge zero-based Modbus addresses mapped by GetView metadata."""
         self.modbus_register_ids.update(register_ids)
+
+    def replace_modbus_register_map(self, register_ids: dict[int, int]) -> None:
+        """Replace the authoritative HomeSolution Modbus metadata snapshot."""
+        self.modbus_register_ids = dict(register_ids)
 
     def get_raw_modbus_register(self, address_1based: int) -> Any | None:
         """Return a raw SAVE value through its discovered cloud data-item ID."""
@@ -125,8 +136,7 @@ class VentilationUnit:
             RegisterConstants.REG_MAINBOARD_SENSOR_OAT: "oat",
         }.get(register_id)
         if temperature_key is not None:
-            if isinstance(value, int | float):
-                self.temperatures[temperature_key] = value / 10.0
+            self.temperatures[temperature_key] = value / 10.0 if isinstance(value, int | float) else None
             return
 
         register_map = {
