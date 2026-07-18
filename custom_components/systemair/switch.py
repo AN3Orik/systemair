@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.const import EntityCategory
 
-from .entity import SystemairEntity
+from .entity import SystemairEntity, homesolution_supported_descriptions, remove_unsupported_homesolution_entities
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
 from .profiles.entities import resolve_profile_entity_register
@@ -78,17 +78,21 @@ def _profile_switch_descriptions(profile: DeviceProfile) -> tuple[SystemairSwitc
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001
+    hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the switch platform."""
+    coordinator = entry.runtime_data.coordinator
+    descriptions = _profile_switch_descriptions(entry.runtime_data.profile)
+    supported_descriptions = homesolution_supported_descriptions(coordinator, descriptions, writable=True)
+    remove_unsupported_homesolution_entities(hass, coordinator, "switch", descriptions, supported_descriptions)
     async_add_entities(
         SystemairSwitch(
-            coordinator=entry.runtime_data.coordinator,
+            coordinator=coordinator,
             entity_description=entity_description,
         )
-        for entity_description in _profile_switch_descriptions(entry.runtime_data.profile)
+        for entity_description in supported_descriptions
     )
 
 

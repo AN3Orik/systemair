@@ -132,6 +132,15 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return True
         return self.data is not None and not isinstance(self.data, dict) and resolve_homesolution_value(self.data, register) is not None
 
+    def supports_modbus_data(self, register: ModbusParameter) -> bool:
+        """Return whether the active transport declares a readable capability."""
+        return not self._is_homesolution or self.client.supports_register(register)
+
+    @property
+    def homesolution_capabilities_complete(self) -> bool:
+        """Return whether optional cloud entities can be filtered safely."""
+        return self._is_homesolution and self.client.capabilities_discovered
+
     def get_raw_register(self, address_1based: int) -> Any | None:
         """Read an unscaled SAVE register address from the active transport."""
         if self.data is None:

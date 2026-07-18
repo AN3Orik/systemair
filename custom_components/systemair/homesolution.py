@@ -11,6 +11,7 @@ from .homesolution_mapping import (
     HOMESOLUTION_WRITE_CAPABILITY_ALIASES,
     PARAMETER_BY_REGISTER,
     encode_homesolution_write_value,
+    homesolution_register_candidates,
     homesolution_write_candidates,
     homesolution_write_capability_id,
 )
@@ -47,6 +48,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         self._view_catalog = HomeSolutionViewCatalog()
         self._poll_lock = asyncio.Lock()
         self._rate_limit_until = 0.0
+        self._capabilities_discovered = False
 
     def _merge_refresh_values(self, values: dict[int, Any]) -> None:
         """Replace discovered address metadata and cloud capability values."""
@@ -81,6 +83,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         # Initial capability discovery and full data fetch
         try:
             result = await asyncio.to_thread(self._view_catalog.discover, self.api, self.device_id)
+            self._capabilities_discovered = bool(result.successful_routes) and not result.errors
             if not result.successful_routes:
                 self._available = False
                 _LOGGER.warning("Device %s did not return any HomeSolution views", self.device_id)
@@ -93,9 +96,11 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                     len(self._view_catalog.routes),
                 )
         except DeviceOfflineError as e:
+            self._capabilities_discovered = False
             self._available = False
             _LOGGER.warning("Device %s is offline: %s. Initial data will be empty.", self.device_id, e)
         except Exception as e:  # noqa: BLE001
+            self._capabilities_discovered = False
             self._available = False
             _LOGGER.warning("Failed to fetch initial device status for %s: %s. Initial data will be empty.", self.device_id, e)
 
@@ -106,6 +111,11 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to connect WebSocket for device %s: %s. Real-time updates will be unavailable.", self.device_id, e)
             self.websocket = None
+        else:
+            try:
+                await asyncio.to_thread(self.api.broadcast_device_statuses, [self.device_id])
+            except Exception as e:  # noqa: BLE001
+                _LOGGER.warning("Failed to request initial HomeSolution status for device %s: %s", self.device_id, e)
 
     async def stop(self) -> None:
         """Stop the client."""
@@ -155,6 +165,11 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
             self.websocket = None
+        else:
+            try:
+                await asyncio.to_thread(self.api.broadcast_device_statuses, [self.device_id])
+            except Exception as e:  # noqa: BLE001
+                _LOGGER.warning("Failed to request HomeSolution status after WebSocket reconnect for device %s: %s", self.device_id, e)
 
     async def _prepare_api_request(self, *, force: bool = False) -> None:
         """Refresh the HTTP token and dependent WebSocket when necessary."""
@@ -271,6 +286,21 @@ class SystemairHomeSolutionClient(SystemairClientBase):
     def available(self) -> bool:
         """Return whether the device is available (online)."""
         return self._available
+
+    @property
+    def capabilities_discovered(self) -> bool:
+        """Return whether initial capability discovery completed without gaps."""
+        return self._capabilities_discovered
+
+    def supports_register(self, register: ModbusParameter) -> bool:
+        """Return whether the discovered cloud schema can supply a SAVE register."""
+        if register.short == "REG_FILTER_REMAINING_TIME_L":
+            return True
+        if self._view_catalog.register_id_for_modbus(register.register) is not None:
+            return True
+        return any(
+            self._view_catalog.route_for_register(register_id) is not None for register_id in homesolution_register_candidates(register)
+        )
 
     def can_write_register(self, register: ModbusParameter) -> bool:
         """Return whether discovery exposed a writable control for a SAVE register."""

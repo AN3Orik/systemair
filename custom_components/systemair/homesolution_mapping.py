@@ -20,6 +20,31 @@ from .systemair_api.utils.register_constants import RegisterConstants
 
 PARAMETER_BY_REGISTER = {parameter.register: parameter for parameter in parameters_list}
 
+# These are semantic fallbacks backed by the device-status payload or an
+# intentionally different mainboard capability. All other fallbacks are legacy
+# direct-ID mappings and are only safe without Modbus extension metadata.
+HOMESOLUTION_STATUS_FALLBACKS = frozenset(
+    {
+        "REG_SENSOR_OAT",
+        "REG_SENSOR_SAT",
+        "REG_SENSOR_RAT",
+        "REG_SENSOR_EAT",
+        "REG_TC_SP",
+        "REG_SENSOR_RHS_PDM",
+        "REG_SENSOR_MODBUS_CO2",
+        "REG_USERMODE_MODE",
+        "REG_USERMODE_HMI_CHANGE_REQUEST",
+        "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",
+        "REG_FUNCTION_ACTIVE_HEATER",
+        "REG_FUNCTION_ACTIVE_COOLER",
+        "REG_OUTPUT_TRIAC",
+        "REG_OUTPUT_Y3_DIGITAL",
+        "REG_ALARM_HARDWARE_ERROR",
+        "REG_FILTER_REMAINING_TIME_L",
+        "REG_IAQ_LEVEL",
+    }
+)
+
 HOMESOLUTION_REGISTER_ALIASES: dict[str, tuple[str, ...]] = {
     "REG_USERMODE_MODE": ("REG_MAINBOARD_USERMODE_MODE_HMI",),
     "REG_USERMODE_HMI_CHANGE_REQUEST": ("REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST",),
@@ -160,7 +185,9 @@ def _optional_flag(unit: VentilationUnit, register_id: int) -> int | None:
 def _remaining_filter_seconds(unit: VentilationUnit) -> int | None:
     """Convert the HomeSolution filter remainder from days to seconds."""
     value = unit.registers.get(RegisterConstants.REG_MAINBOARD_FILTER_REMAINING_TIME_L)
-    return None if value is None else int(value) * 24 * 3600
+    if value is not None:
+        return int(value) * 24 * 3600
+    return None if unit.filter_expiration is None else int(unit.filter_expiration)
 
 
 def get_reg(unit: VentilationUnit, register_id: int, default: Any = None) -> Any:
@@ -174,7 +201,6 @@ def homesolution_register_candidates(register: ModbusParameter) -> tuple[int, ..
     names = list(HOMESOLUTION_REGISTER_ALIASES.get(register.short, ()))
     if register.short.startswith("REG_"):
         names.append(f"REG_MAINBOARD_{register.short[4:]}")
-    names.append(register.short)
 
     candidates: list[int] = []
     for name in names:
@@ -226,12 +252,18 @@ def _raw_register_value(unit: VentilationUnit, register: ModbusParameter) -> Any
             continue
         if register_id in unit.registers:
             return unit.registers[register_id]
-    if register.register - 1 in unit.modbus_register_ids:
-        return unit.get_raw_modbus_register(register.register)
-    if (value := unit.get_raw_modbus_register(register.register)) is not None:
-        return value
-    if exact_register_id is not None and exact_register_id in unit.registers:
-        return unit.registers[exact_register_id]
+    mapped_register_id = unit.modbus_register_ids.get(register.register - 1)
+    if mapped_register_id is not None:
+        return unit.registers.get(mapped_register_id)
+
+    # Legacy snapshots without Modbus metadata used zero-based SAVE addresses as
+    # data-item IDs. Once metadata exists, the same number can identify an
+    # unrelated mainboard capability and must not be used as an implicit match.
+    if not unit.modbus_register_ids:
+        if (value := unit.get_raw_modbus_register(register.register)) is not None:
+            return value
+        if exact_register_id is not None and exact_register_id in unit.registers:
+            return unit.registers[exact_register_id]
     return None
 
 
@@ -271,13 +303,14 @@ def resolve_homesolution_value(unit: VentilationUnit, register: ModbusParameter)
         if decoded is not None:
             return decoded
 
+    if unit.modbus_register_ids and register.short not in HOMESOLUTION_STATUS_FALLBACKS:
+        return None
+
     fallback = HOMESOLUTION_MAPPING.get(register.short)
     if fallback is None or (value := fallback(unit)) is None:
         return None
-    if register.boolean:
-        return bool(value)
     try:
-        return float(value)
+        return bool(value) if register.boolean else float(value)
     except (TypeError, ValueError):
         return None
 

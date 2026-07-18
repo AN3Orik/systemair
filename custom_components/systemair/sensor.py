@@ -35,7 +35,7 @@ from .const import (
     DEFAULT_FAN_POWER_FACTOR,
     resolve_model_specs,
 )
-from .entity import SystemairEntity
+from .entity import SystemairEntity, homesolution_supported_descriptions, remove_unsupported_homesolution_entities
 from .modbus import (
     ModbusParameter,
     alarm_log_registers,
@@ -502,7 +502,7 @@ def airflow_sensor_descriptions(model: str, profile: DeviceProfile) -> tuple[Sys
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -510,7 +510,10 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     profile = entry.runtime_data.profile
 
-    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in _profile_sensor_descriptions(profile)]
+    descriptions = _profile_sensor_descriptions(profile)
+    supported_descriptions = homesolution_supported_descriptions(coordinator, descriptions)
+    remove_unsupported_homesolution_entities(hass, coordinator, "sensor", descriptions, supported_descriptions)
+    sensors = [SystemairSensor(coordinator=coordinator, entity_description=desc) for desc in supported_descriptions]
     entities: list[SensorEntity] = [*sensors]
 
     if profile.power_registers is not None:

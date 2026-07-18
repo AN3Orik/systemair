@@ -8,6 +8,7 @@ import unittest
 from dataclasses import replace
 from types import SimpleNamespace
 
+from custom_components.systemair import entity as entity_module
 from custom_components.systemair import homesolution_mapping
 from custom_components.systemair.coordinator import SystemairDataUpdateCoordinator
 from custom_components.systemair.entity import SystemairEntity
@@ -78,6 +79,15 @@ class HomeSolutionMappingTest(unittest.TestCase):
         assert unit.get_raw_modbus_register(12102) is None
         assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_SENSOR_OAT"]) is None
 
+    def test_cloud_id_collision_does_not_create_a_fake_modbus_capability(self) -> None:
+        """A cloud data-item ID shared with another Modbus address cannot impersonate an absent setting."""
+        unit = VentilationUnit("device", "Unit")
+        collision_id = RegisterConstants.REG_DEMC_RH_SETTINGS_SP_WINTER
+        unit.registers[collision_id] = 77
+        unit.update_modbus_register_map({14100: collision_id})
+
+        assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_DEMC_RH_SETTINGS_SP_WINTER"]) is None
+
     def test_missing_capability_is_none_but_summary_fallback_remains_available(self) -> None:
         """Absent hardware stays unavailable while explicit cloud summaries still work."""
         resolver = getattr(homesolution_mapping, "resolve_homesolution_value", None)
@@ -92,6 +102,13 @@ class HomeSolutionMappingTest(unittest.TestCase):
 
         unit.user_mode = 12
         assert resolver(unit, parameter_map["REG_USERMODE_MODE"]) == 12.0
+
+    def test_filter_remaining_time_uses_the_cloud_status_payload(self) -> None:
+        """The status WebSocket supplies filter lifetime when GetView omits its register."""
+        unit = VentilationUnit("device", "Unit")
+        unit.filter_expiration = 2_592_000
+
+        assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_FILTER_REMAINING_TIME_L"]) == 2_592_000
 
     def test_cloud_fan_setpoint_precedes_delayed_speed_indication(self) -> None:
         """The selected fan mode updates immediately while actual airflow catches up."""
@@ -164,6 +181,21 @@ class HomeSolutionMappingTest(unittest.TestCase):
         entity.entity_description = SimpleNamespace(registry=parameter_map["REG_OUTPUT_Y4_CIRC_PUMP"])
 
         assert entity.available is False
+
+    def test_complete_cloud_discovery_only_keeps_supported_entity_descriptions(self) -> None:
+        """Optional SAVE entities absent from a complete cloud catalog are not created."""
+        filter_descriptions = getattr(entity_module, "homesolution_supported_descriptions", None)
+        assert filter_descriptions is not None
+        available = SimpleNamespace(key="available", registry=parameter_map["REG_OUTPUT_Y2_ANALOG"])
+        absent = SimpleNamespace(key="absent", registry=parameter_map["REG_OUTPUT_Y4_CIRC_PUMP"])
+        coordinator = SimpleNamespace(
+            homesolution_capabilities_complete=True,
+            supports_modbus_data=lambda register: register.short == "REG_OUTPUT_Y2_ANALOG",
+            can_set_modbus_data=lambda _register: True,
+            can_set_modbus_data_32bit=lambda _register: True,
+        )
+
+        assert filter_descriptions(coordinator, (available, absent)) == (available,)
 
 
 if __name__ == "__main__":

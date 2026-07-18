@@ -264,6 +264,7 @@ class HomeSolutionClientTest(unittest.TestCase):
         assert client._view_catalog.calls == 1
         assert client.unit.registers[29] == 3
         assert client.available is True
+        fake_api.broadcast_device_statuses.assert_called_once_with(["device"])
 
     def test_websocket_failure_does_not_override_successful_http_poll(self) -> None:
         """Optional real-time transport cannot mark a polled device offline."""

@@ -11,7 +11,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 
-from .entity import SystemairEntity
+from .entity import SystemairEntity, homesolution_supported_descriptions, remove_unsupported_homesolution_entities
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
 from .profiles.entities import resolve_profile_entity_register
@@ -193,17 +193,21 @@ def _profile_binary_sensor_descriptions(profile: DeviceProfile) -> tuple[Systema
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the binary_sensor platform."""
+    coordinator = entry.runtime_data.coordinator
+    descriptions = _profile_binary_sensor_descriptions(entry.runtime_data.profile)
+    supported_descriptions = homesolution_supported_descriptions(coordinator, descriptions)
+    remove_unsupported_homesolution_entities(hass, coordinator, "binary_sensor", descriptions, supported_descriptions)
     async_add_entities(
         SystemairBinarySensor(
-            coordinator=entry.runtime_data.coordinator,
+            coordinator=coordinator,
             entity_description=entity_description,
         )
-        for entity_description in _profile_binary_sensor_descriptions(entry.runtime_data.profile)
+        for entity_description in supported_descriptions
     )
 
 

@@ -15,7 +15,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import LOGGER
-from .entity import SystemairEntity
+from .entity import SystemairEntity, homesolution_supported_descriptions, remove_unsupported_homesolution_entities
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
 
@@ -51,7 +51,7 @@ TIMESTAMP_CONSTANT = 760516096
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -60,7 +60,9 @@ async def async_setup_entry(
         return
 
     coordinator = entry.runtime_data.coordinator
-    async_add_entities(SystemairButton(coordinator=coordinator, entity_description=desc) for desc in ENTITY_DESCRIPTIONS)
+    supported_descriptions = homesolution_supported_descriptions(coordinator, ENTITY_DESCRIPTIONS, writable_32bit=True)
+    remove_unsupported_homesolution_entities(hass, coordinator, "button", ENTITY_DESCRIPTIONS, supported_descriptions)
+    async_add_entities(SystemairButton(coordinator=coordinator, entity_description=desc) for desc in supported_descriptions)
 
 
 class SystemairButton(SystemairEntity, ButtonEntity):

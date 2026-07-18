@@ -21,7 +21,7 @@ from homeassistant.const import (
 )
 from homeassistant.exceptions import HomeAssistantError
 
-from .entity import SystemairEntity
+from .entity import SystemairEntity, homesolution_supported_descriptions, remove_unsupported_homesolution_entities
 from .modbus import ModbusParameter, parameter_map
 from .profiles import DEVICE_PROFILE_SAVE
 from .profiles.entities import resolve_profile_entity_register
@@ -417,17 +417,21 @@ def _profile_number_descriptions(profile: DeviceProfile) -> tuple[SystemairNumbe
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: SystemairConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up number from a config entry."""
+    coordinator = entry.runtime_data.coordinator
+    descriptions = _profile_number_descriptions(entry.runtime_data.profile)
+    supported_descriptions = homesolution_supported_descriptions(coordinator, descriptions, writable=True)
+    remove_unsupported_homesolution_entities(hass, coordinator, "number", descriptions, supported_descriptions)
     async_add_entities(
         SystemairNumber(
-            coordinator=entry.runtime_data.coordinator,
+            coordinator=coordinator,
             entity_description=entity_description,
         )
-        for entity_description in _profile_number_descriptions(entry.runtime_data.profile)
+        for entity_description in supported_descriptions
     )
 
 
