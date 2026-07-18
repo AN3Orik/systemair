@@ -157,6 +157,25 @@ class AlwaysWritableCatalog(FakeCatalog):
 class HomeSolutionClientTest(unittest.TestCase):
     """The cloud client polls all views independently of WebSocket state."""
 
+    def test_coordinator_calls_homesolution_through_the_shared_client_contract(self) -> None:
+        """HomeSolution accepts the alarm options passed to every Systemair client."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.unit = VentilationUnit("device", "Unit")
+        client.unit.update_register_values({29: 3})
+        client._rate_limit_until = float("inf")
+
+        coordinator = SystemairDataUpdateCoordinator.__new__(SystemairDataUpdateCoordinator)
+        coordinator.client = client
+        coordinator.config_entry = SimpleNamespace(options={"enable_alarm_details": False, "enable_alarm_history": True})
+        coordinator._is_webapi = False
+
+        try:
+            unit = asyncio.run(coordinator._async_update_data())
+        except TypeError as err:
+            self.fail(f"HomeSolution get_all_data contract mismatch: {err}")
+
+        assert unit is client.unit
+
     def test_get_all_data_refreshes_catalog_and_restores_availability(self) -> None:
         """A partial view error preserves successful data and online state."""
         client = SystemairHomeSolutionClient("user", "password", "device")

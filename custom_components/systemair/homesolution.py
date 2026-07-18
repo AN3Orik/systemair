@@ -208,10 +208,13 @@ class SystemairHomeSolutionClient(SystemairClientBase):
     async def get_all_data(
         self,
         *,
-        _enable_alarm_details: bool = True,
-        _enable_alarm_history: bool = False,
+        enable_alarm_details: bool = True,
+        enable_alarm_history: bool = False,
     ) -> VentilationUnit:
         """Get all data."""
+        # HomeSolution discovers alarm capabilities through the same view catalog;
+        # these options remain part of the shared Systemair client contract.
+        del enable_alarm_details, enable_alarm_history
         if self._rate_limit_until > monotonic() and self.unit is not None and self.unit.registers:
             return self.unit
 

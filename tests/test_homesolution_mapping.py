@@ -93,19 +93,21 @@ class HomeSolutionMappingTest(unittest.TestCase):
         unit.user_mode = 12
         assert resolver(unit, parameter_map["REG_USERMODE_MODE"]) == 12.0
 
-    def test_cloud_fan_stop_value_matches_save_climate_semantics(self) -> None:
-        """Action and readback IDs use their distinct airflow enumerations."""
+    def test_cloud_fan_setpoint_precedes_delayed_speed_indication(self) -> None:
+        """The selected fan mode updates immediately while actual airflow catches up."""
         resolver = homesolution_mapping.resolve_homesolution_value
         register = parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]
         unit = VentilationUnit("device", "Unit")
-        unit.registers[RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF] = 1
+        unit.registers[RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF] = 0
+        unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] = 4
 
         assert resolver(unit, register) == 0.0
 
-        unit.registers[RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF] = 2
-        assert resolver(unit, register) == 2.0
+        unit.registers[RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF] = 4
+        unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] = 2
+        assert resolver(unit, register) == 4.0
 
-        unit.registers.clear()
+        unit.registers.pop(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)
         unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] = 1
         assert resolver(unit, register) == 2.0
 
@@ -131,10 +133,10 @@ class HomeSolutionMappingTest(unittest.TestCase):
         )
         assert (
             capability(fan, RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)
-            == RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP
+            == RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF
         )
         assert encode(mode, 4) == 4
-        assert encode(fan, 0) == 1
+        assert encode(fan, 0) == 0
         assert encode(fan, 3) == 3
         assert encode(eco, 1) == "true"
         assert encode(eco, 0) == "false"
