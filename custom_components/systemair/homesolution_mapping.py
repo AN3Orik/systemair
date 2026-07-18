@@ -48,9 +48,6 @@ HOMESOLUTION_WRITE_CAPABILITY_ALIASES: dict[str, dict[str, str]] = {
     "REG_USERMODE_HMI_CHANGE_REQUEST": {
         "REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST": "REG_MAINBOARD_USERMODE_MODE_HMI",
     },
-    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": {
-        "REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": "REG_MAINBOARD_SPEED_INDICATION_APP",
-    },
     "REG_FILTER_PERIOD": {
         "REG_MAINBOARD_FILTER_PERIOD_SET": "REG_MAINBOARD_FILTER_PERIOD",
     },
@@ -125,15 +122,13 @@ def _speed_indication_to_save_fan_mode(value: Any) -> int | None:
 
 
 def _resolve_fan_mode_register(unit: VentilationUnit) -> float | None:
-    """Resolve the action/readback airflow enums to SAVE Climate values."""
+    """Resolve the selected fan mode, falling back to delayed actual airflow."""
+    if (action := unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)) is not None:
+        value = _speed_indication_to_save_fan_mode(action)
+        return None if value is None else float(value)
     if (readback := unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP)) is not None:
         value = _speed_indication_to_save_fan_mode(readback)
         return None if value is None else float(value)
-    if (action := unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)) is not None:
-        try:
-            return 0.0 if int(action) == 1 else float(action)
-        except (TypeError, ValueError):
-            return None
     value = _get_fan_mode_value(unit)
     return None if value is None else float(value)
 
@@ -218,8 +213,6 @@ def encode_homesolution_write_value(register: ModbusParameter, value: int) -> in
     """Translate SAVE Modbus command values for a selected HomeSolution control."""
     if register.boolean:
         return "true" if value else "false"
-    if register.short == "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF" and value == 0:
-        return 1
     return value
 
 
