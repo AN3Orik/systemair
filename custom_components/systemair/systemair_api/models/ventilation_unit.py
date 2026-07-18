@@ -1,5 +1,6 @@
 """Ventilation unit model."""
 
+from collections.abc import Iterator
 from typing import Any
 
 from custom_components.systemair.systemair_api.api.systemair_api import SystemairAPI
@@ -17,7 +18,7 @@ class VentilationUnit:
         self.identifier: str = identifier
         self.name: str = name
         self.model: str | None = None
-        self.active_alarms: bool = False
+        self.active_alarms: bool | None = None
         self.airflow: int | None = None
         self.connectivity: list[str] = []
         self.filter_expiration: int | None = None
@@ -46,6 +47,7 @@ class VentilationUnit:
 
         # All raw registers
         self.registers: dict[int, Any] = {}
+        self.modbus_register_ids: dict[int, int] = {}
 
         # Attributes from API data
         self.eco_mode: int | None = None
@@ -77,25 +79,59 @@ class VentilationUnit:
 
     def update_from_api(self, api_data: dict[str, Any]) -> None:
         """Update the ventilation unit with data from the API."""
-        if "data" in api_data and "GetView" in api_data["data"]:
-            children = api_data["data"]["GetView"]["children"]
-            for child in children:
-                if "properties" in child and "dataItem" in child["properties"]:
-                    data_item = child["properties"]["dataItem"]
-                    self._update_attribute(data_item)
+        for data_item in self._iter_data_items(api_data):
+            self._update_attribute(data_item)
+
+    def update_register_values(self, values: dict[int, Any]) -> None:
+        """Merge raw HomeSolution register values into the unit state."""
+        for register_id, value in values.items():
+            self._update_attribute({"id": register_id, "value": value})
+
+    def update_modbus_register_map(self, register_ids: dict[int, int]) -> None:
+        """Merge zero-based Modbus addresses mapped by GetView metadata."""
+        self.modbus_register_ids.update(register_ids)
+
+    def get_raw_modbus_register(self, address_1based: int) -> Any | None:
+        """Return a raw SAVE value through its discovered cloud data-item ID."""
+        register_id = self.modbus_register_ids.get(address_1based - 1)
+        if register_id is not None and register_id in self.registers:
+            return self.registers[register_id]
+        return self.registers.get(address_1based - 1)
+
+    @classmethod
+    def _iter_data_items(cls, node: Any) -> Iterator[dict[str, Any]]:
+        """Yield every data item nested in a HomeSolution view response."""
+        if isinstance(node, dict):
+            data_item = node.get("dataItem")
+            if isinstance(data_item, dict) and "id" in data_item and "value" in data_item:
+                yield data_item
+            for key, value in node.items():
+                if key != "dataItem":
+                    yield from cls._iter_data_items(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from cls._iter_data_items(value)
 
     def _update_attribute(self, data_item: dict[str, Any]) -> None:
         """Update a specific attribute based on register data."""
         register_id = data_item["id"]
-        value = data_item["value"]
+        value = self._coerce_register_value(data_item["value"])
 
         # Store raw register value
         self.registers[register_id] = value
 
+        temperature_key = {
+            RegisterConstants.REG_MAINBOARD_TC_SP: "setpoint",
+            RegisterConstants.REG_MAINBOARD_SENSOR_OAT: "oat",
+        }.get(register_id)
+        if temperature_key is not None:
+            if isinstance(value, int | float):
+                self.temperatures[temperature_key] = value / 10.0
+            return
+
         register_map = {
             RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI: ("user_mode", value),
             RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: ("airflow", value),
-            RegisterConstants.REG_MAINBOARD_TC_SP: ("temperatures", ("setpoint", value / 10.0)),
             RegisterConstants.REG_MAINBOARD_USERMODE_REMAINING_TIME_L: ("user_mode_remaining_time", value),
             RegisterConstants.REG_MAINBOARD_USERMODE_HOLIDAY_TIME: ("user_mode_times", ("holiday", value)),
             RegisterConstants.REG_MAINBOARD_USERMODE_AWAY_TIME: ("user_mode_times", ("away", value)),
@@ -103,7 +139,6 @@ class VentilationUnit:
             RegisterConstants.REG_MAINBOARD_USERMODE_REFRESH_TIME: ("user_mode_times", ("refresh", value)),
             RegisterConstants.REG_MAINBOARD_USERMODE_CROWDED_TIME: ("user_mode_times", ("crowded", value)),
             RegisterConstants.REG_MAINBOARD_IAQ_LEVEL: ("air_quality", value),
-            RegisterConstants.REG_MAINBOARD_SENSOR_OAT: ("temperatures", ("oat", value / 10.0)),
             RegisterConstants.REG_MAINBOARD_ECO_MODE_ON_OFF: ("eco_mode", value),
             RegisterConstants.REG_MAINBOARD_LOCKED_USER: ("locked_user", value),
             RegisterConstants.REG_MAINBOARD_ALARM_TYPE_A: ("alarm_type_a", value),
@@ -126,8 +161,22 @@ class VentilationUnit:
         elif register_id in range(
             RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_COOLING, RegisterConstants.REG_MAINBOARD_FUNCTION_ACTIVE_CDI_3 + 1
         ):
-            function_name = RegisterConstants.get_register_name(register_id).split("_")[-1].lower()
+            register_name = RegisterConstants(register_id).name
+            function_name = register_name.removeprefix("REG_MAINBOARD_FUNCTION_ACTIVE_").lower()
             self.active_functions[function_name] = value
+
+    @staticmethod
+    def _coerce_register_value(value: Any) -> Any:
+        """Convert numeric GraphQL strings while preserving other capability data."""
+        if not isinstance(value, str):
+            return value
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return value
 
     def update_from_websocket(self, ws_data: dict[str, Any]) -> None:
         """Update the ventilation unit with data from a WebSocket message."""
@@ -184,7 +233,7 @@ class VentilationUnit:
         """Get the fan speed as a percentage (0-100)."""
         return self.airflow or 0
 
-    def get_filter_alarm(self) -> bool:
+    def get_filter_alarm(self) -> bool | None:
         """Check if there's a filter alarm active."""
         # Placeholder implementation - will need to be updated based on how filter alarms are detected
         return self.active_alarms

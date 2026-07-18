@@ -140,6 +140,27 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
             self._attr_hvac_modes.append(HVACMode.COOL)
 
     @property
+    def available(self) -> bool:
+        """Return whether HomeSolution exposes all core climate controls."""
+        if not self._is_homesolution:
+            return super().available
+        readable = (
+            parameter_map["REG_USERMODE_MODE"],
+            parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"],
+            parameter_map["REG_TC_SP"],
+        )
+        writable = (
+            parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"],
+            parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"],
+            parameter_map["REG_TC_SP"],
+        )
+        return (
+            super().available
+            and all(self.coordinator.has_modbus_data(register) for register in readable)
+            and all(self.coordinator.can_set_modbus_data(register) for register in writable)
+        )
+
+    @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation ie. heat, cool mode."""
         # Check manual fan speed setting first
@@ -179,7 +200,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()
 
     async def async_turn_off(self, **_kwargs: Any) -> None:
         """Turn the entity off."""
@@ -188,7 +209,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -237,7 +258,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()
 
     @property
     def preset_mode(self) -> str | None:
@@ -276,7 +297,7 @@ class SystemairClimateEntity(SystemairEntity, ClimateEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()
 
 
 class SystemairD24810ClimateEntity(SystemairEntity, ClimateEntity):
@@ -357,4 +378,4 @@ class SystemairD24810ClimateEntity(SystemairEntity, ClimateEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()

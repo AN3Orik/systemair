@@ -108,6 +108,11 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}-{entity_description.key}"
 
     @property
+    def available(self) -> bool:
+        """Return whether the switch has a readable and writable capability."""
+        return super().available and self.coordinator.can_set_modbus_data(self.entity_description.registry)
+
+    @property
     def is_on(self) -> bool | None:
         """Return true if the switch is on."""
         val = self.coordinator.get_modbus_data(self.entity_description.registry)
@@ -119,7 +124,7 @@ class SystemairSwitch(SystemairEntity, SwitchEntity):
         """Turn on or off the switch."""
         await self.coordinator.set_modbus_data(self.entity_description.registry, value=value)
         await asyncio.sleep(1)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh_after_write()
 
     async def async_turn_on(self, **_: Any) -> None:
         """Turn on the switch."""

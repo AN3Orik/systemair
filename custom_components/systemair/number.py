@@ -453,6 +453,11 @@ class SystemairNumber(SystemairEntity, NumberEntity):
         self.native_max_value = float(entity_description.registry.max_value or 100) / scale_factor
 
     @property
+    def available(self) -> bool:
+        """Return whether the number has a readable and writable capability."""
+        return super().available and self.coordinator.can_set_modbus_data(self.entity_description.registry)
+
+    @property
     def native_value(self) -> float | None:
         """Return the state of the number."""
         return self.coordinator.get_modbus_data(self.entity_description.registry)
@@ -464,4 +469,4 @@ class SystemairNumber(SystemairEntity, NumberEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()

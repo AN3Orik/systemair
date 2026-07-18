@@ -155,6 +155,11 @@ class SystemairSelect(SystemairEntity, SelectEntity):
         self._option_to_value_map = {v: k for k, v in self.entity_description.options_map.items()}
 
     @property
+    def available(self) -> bool:
+        """Return whether the select has a readable and writable capability."""
+        return super().available and self.coordinator.can_set_modbus_data(self.entity_description.registry)
+
+    @property
     def current_option(self) -> str | None:
         """Return the selected entity option to represent the entity state."""
         value = self.coordinator.get_modbus_data(self.entity_description.registry)
@@ -174,4 +179,4 @@ class SystemairSelect(SystemairEntity, SelectEntity):
         except (asyncio.exceptions.TimeoutError, ConnectionError) as exc:
             raise HomeAssistantError from exc
         finally:
-            await self.coordinator.async_refresh()
+            await self.coordinator.async_refresh_after_write()

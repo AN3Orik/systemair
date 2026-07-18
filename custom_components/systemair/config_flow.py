@@ -330,6 +330,13 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return devices
 
+    async def _validate_homesolution_reauth(self, user_input: dict[str, Any], device_id: str | None) -> None:
+        """Verify refreshed credentials still expose the configured cloud device."""
+        devices = await self._get_homesolution_devices(user_input)
+        if not any((device.get("identifier") or device.get("id")) == device_id for device in devices):
+            msg = "Configured HomeSolution device is not available for this account"
+            raise SystemairApiClientCommunicationError(msg)
+
     async def async_step_user(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Handle the initial step - select API type."""
         if user_input is not None:
@@ -587,7 +594,10 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             merged = {**self._reauth_entry_data, CONF_PASSWORD: user_input[CONF_PASSWORD]}
             try:
-                await self._validate_webapi_connection(merged)
+                if entry.data.get(CONF_API_TYPE) == API_TYPE_HOMESOLUTION:
+                    await self._validate_homesolution_reauth(merged, entry.data.get(CONF_DEVICE_ID))
+                else:
+                    await self._validate_webapi_connection(merged)
             except SystemairAuthRequiredError as exception:
                 LOGGER.error(exception)
                 errors["base"] = "password_not_set"
@@ -600,6 +610,9 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except SystemairApiClientError as exception:
                 LOGGER.exception(exception)
                 errors["base"] = "unknown"
+            except ValueError as exception:
+                reason = str(exception)
+                errors["base"] = reason if reason in {"invalid_auth", "cannot_connect"} else "unknown"
             else:
                 self.hass.config_entries.async_update_entry(
                     entry,
@@ -680,6 +693,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_API_TYPE: API_TYPE_HOMESOLUTION,
                     CONF_DEVICE_PROFILE: DEVICE_PROFILE_SAVE,
                     CONF_DEVICE_ID: device_id,
+                    CONF_MODEL: user_input[CONF_MODEL],
                 }
 
                 return self.async_create_entry(
@@ -700,6 +714,12 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_DEVICE_ID): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Required(CONF_MODEL, default="VSR 300"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=list(MODEL_SPECS),
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
@@ -764,15 +784,16 @@ class SystemairOptionsFlowHandler(config_entries.OptionsFlow):
         for option_key, suggested_value in _airflow_calibration_suggestions(default_model, profile, self.config_entry.options).items():
             schema_dict[vol.Optional(option_key, description={"suggested_value": suggested_value})] = calibration_selector
 
-        schema_dict[vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval)] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=10,
-                max=120,
-                step=1,
-                mode=selector.NumberSelectorMode.BOX,
-                unit_of_measurement="s",
+        if api_type != API_TYPE_HOMESOLUTION:
+            schema_dict[vol.Optional(CONF_UPDATE_INTERVAL, default=default_update_interval)] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=10,
+                    max=120,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s",
+                )
             )
-        )
 
         # Web API specific options
         if api_type == API_TYPE_MODBUS_WEBAPI:
