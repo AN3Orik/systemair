@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import unittest
 from functools import partial
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT
 
 from custom_components.systemair.config_flow import ProfileAutoDetectionFailedError, SystemairVSRConfigFlow
 from custom_components.systemair.const import (
+    API_TYPE_HOMESOLUTION,
     CONF_BAUDRATE,
     CONF_BYTESIZE,
+    CONF_DEVICE_ID,
     CONF_DEVICE_PROFILE,
     CONF_PARITY,
     CONF_SERIAL_PORT,
@@ -136,3 +139,27 @@ class ConfigFlowProfileDetectionTest(unittest.IsolatedAsyncioTestCase):
             )
 
         assert result["errors"]["base"] == "cannot_auto_detect_profile"  # noqa: S101
+
+    async def test_homesolution_reauth_accepts_legacy_id_when_identifier_is_also_present(self) -> None:
+        """Existing entries can match either cloud device identifier field."""
+        flow = SystemairVSRConfigFlow()
+        flow._get_homesolution_devices = AsyncMock(  # noqa: SLF001
+            return_value=[{"identifier": "current-identifier", "id": "legacy-device-id"}]
+        )
+
+        await flow._validate_homesolution_reauth({}, "legacy-device-id")  # noqa: SLF001
+
+    async def test_homesolution_reauth_preserves_no_devices_error(self) -> None:
+        """An account without units receives its specific translated error."""
+        flow = SystemairVSRConfigFlow()
+        flow._reauth_entry_data = {}  # noqa: SLF001
+        entry = SimpleNamespace(
+            data={"api_type": API_TYPE_HOMESOLUTION, CONF_DEVICE_ID: "device"},
+            entry_id="entry",
+        )
+        flow._get_reauth_entry = lambda: entry  # noqa: SLF001
+        flow._validate_homesolution_reauth = AsyncMock(side_effect=ValueError("no_devices_found"))  # noqa: SLF001
+
+        result = await flow.async_step_reauth_confirm({CONF_PASSWORD: "password"})
+
+        assert result["errors"]["base"] == "no_devices_found"  # noqa: S101

@@ -105,8 +105,8 @@ class VentilationUnit:
     def get_raw_modbus_register(self, address_1based: int) -> Any | None:
         """Return a raw SAVE value through its discovered cloud data-item ID."""
         register_id = self.modbus_register_ids.get(address_1based - 1)
-        if register_id is not None and register_id in self.registers:
-            return self.registers[register_id]
+        if register_id is not None:
+            return self.registers.get(register_id)
         return self.registers.get(address_1based - 1)
 
     @classmethod

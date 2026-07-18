@@ -5,12 +5,13 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 
 from custom_components.systemair import homesolution_mapping
 from custom_components.systemair.coordinator import SystemairDataUpdateCoordinator
 from custom_components.systemair.entity import SystemairEntity
-from custom_components.systemair.modbus import parameter_map
+from custom_components.systemair.modbus import IntegerType, parameter_map
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
 from custom_components.systemair.systemair_api.utils.register_constants import RegisterConstants
 
@@ -47,6 +48,19 @@ class HomeSolutionMappingTest(unittest.TestCase):
         assert resolver(unit, parameter_map["REG_SENSOR_SAT"]) == -1.0
         assert resolver(unit, parameter_map["REG_OUTPUT_Y2_ANALOG"]) == 47.0
 
+    def test_signed_register_boundaries_use_their_actual_bit_width(self) -> None:
+        """Combined signed values use 32-bit rather than 16-bit sign extension."""
+        decoder = homesolution_mapping._decode_register_value
+        unit = VentilationUnit("device", "Unit")
+
+        assert decoder(unit, parameter_map["REG_SENSOR_SAT"], 0x8000) == -3276.8
+
+        signed_32 = replace(parameter_map["REG_USERMODE_REMAINING_TIME_L"], sig=IntegerType.INT)
+        unit.registers[900] = 0x8000
+        unit.update_modbus_register_map({signed_32.combine_with_32_bit - 1: 900})
+
+        assert decoder(unit, signed_32, 0) == -2147483648.0
+
     def test_extension_modbus_mapping_resolves_cloud_specific_data_item_id(self) -> None:
         """GetView metadata bridges SAVE addresses to arbitrary cloud data-item IDs."""
         unit = VentilationUnit("device", "Unit")
@@ -54,6 +68,15 @@ class HomeSolutionMappingTest(unittest.TestCase):
         unit.update_modbus_register_map({14000: 900})
 
         assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_OUTPUT_SAF"]) == 47.0
+
+    def test_authoritative_modbus_mapping_does_not_fall_back_to_an_unrelated_cloud_id(self) -> None:
+        """A mapped address with no value remains unavailable instead of reading its numeric-ID twin."""
+        unit = VentilationUnit("device", "Unit")
+        unit.registers[12101] = 999
+        unit.update_modbus_register_map({12101: 900})
+
+        assert unit.get_raw_modbus_register(12102) is None
+        assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_SENSOR_OAT"]) is None
 
     def test_missing_capability_is_none_but_summary_fallback_remains_available(self) -> None:
         """Absent hardware stays unavailable while explicit cloud summaries still work."""

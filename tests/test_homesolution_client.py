@@ -9,8 +9,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from custom_components.systemair.api import SystemairAuthExpiredError
 from custom_components.systemair.coordinator import SystemairDataUpdateCoordinator
-from custom_components.systemair.homesolution import SystemairHomeSolutionClient
+from custom_components.systemair.homesolution import AUTH_FAILURE_THRESHOLD, SystemairHomeSolutionClient
 from custom_components.systemair.homesolution_views import HomeSolutionRefreshResult
 from custom_components.systemair.modbus import parameter_map
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
@@ -76,6 +77,12 @@ class FakeCatalog:
             return "/service/settings"
         return "/home" if FakeCatalog.is_register_writable(register_id) else None
 
+    @classmethod
+    def routes_for_register(cls, register_id: int) -> tuple[str, ...]:
+        """Return the fake register's sole owning view."""
+        route = cls.route_for_register(register_id)
+        return (route,) if route is not None else ()
+
     def refresh_routes(self, _api: object, _device_id: str, routes: tuple[str, ...]) -> HomeSolutionRefreshResult:
         """Return the route refreshed immediately after a command."""
         self.route_refreshes.append(routes)
@@ -125,6 +132,26 @@ class RateLimitedCatalog(FakeCatalog):
         """Reject polling until the advertised retry window elapses."""
         self.calls += 1
         raise RateLimitError(retry_after=120)
+
+
+class DuplicateOwnerCatalog(FakeCatalog):
+    """Expose one readback capability from two cloud views."""
+
+    @staticmethod
+    def routes_for_register(register_id: int) -> tuple[str, ...]:
+        """Return every route which can overwrite the mode readback."""
+        if register_id == RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI:
+            return ("/home", "/home/changeMode")
+        return ()
+
+
+class AlwaysWritableCatalog(FakeCatalog):
+    """Expose every test register as writable."""
+
+    @staticmethod
+    def is_register_writable(_register_id: int) -> bool:
+        """Allow both halves of a synthetic 32-bit write."""
+        return True
 
 
 class HomeSolutionClientTest(unittest.TestCase):
@@ -257,6 +284,45 @@ class HomeSolutionClientTest(unittest.TestCase):
         )
         assert client._view_catalog.route_refreshes == [("/home",)]
         assert client.can_write_register(parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"]) is True
+
+    def test_write_refreshes_every_view_owning_the_readback(self) -> None:
+        """A stale duplicate view cannot overwrite a freshly read command result."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.authenticator = FakeAuthenticator()
+        client.api = Mock()
+        client.api.write_data_item.return_value = {"data": {"WriteDataItems": True}}
+        client.unit = VentilationUnit("device", "Unit")
+        client._view_catalog = DuplicateOwnerCatalog()
+        client._available = True
+
+        asyncio.run(client.write_register(parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"].register, 4))
+
+        assert client._view_catalog.route_refreshes == [("/home", "/home/changeMode")]
+
+    def test_write_authentication_failures_reach_reauth_threshold(self) -> None:
+        """Both single and 32-bit cloud writes can trigger Home Assistant reauth."""
+        operations = (
+            lambda client: client.write_register(parameter_map["REG_USERMODE_HMI_CHANGE_REQUEST"].register, 4),
+            lambda client: client.write_registers_32bit(parameter_map["REG_FILTER_REPLACEMENT_TIME_L"].register, 1),
+        )
+
+        for operation in operations:
+            with self.subTest(operation=operation):
+                client = SystemairHomeSolutionClient("user", "password", "device")
+                client.unit = VentilationUnit("device", "Unit")
+                client.unit.update_modbus_register_map({7001: 901, 7002: 902})
+                client._view_catalog = AlwaysWritableCatalog()
+                client._available = True
+                client._auth_failure_count = AUTH_FAILURE_THRESHOLD - 1
+                client._execute_api_request = AsyncMock(side_effect=AuthenticationError("rejected after token rotation"))
+
+                with (
+                    self.assertLogs("custom_components.systemair.homesolution", level="ERROR"),
+                    self.assertRaises(SystemairAuthExpiredError),  # noqa: PT027 -- suite intentionally uses unittest
+                ):
+                    asyncio.run(operation(client))
+
+                assert client._auth_failure_count == AUTH_FAILURE_THRESHOLD
 
     def test_post_write_readback_failure_does_not_reject_accepted_command(self) -> None:
         """A temporary readback timeout is deferred to the next coordinator poll."""

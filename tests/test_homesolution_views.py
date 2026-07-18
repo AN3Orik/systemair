@@ -124,6 +124,24 @@ class HomeSolutionViewsTest(unittest.TestCase):
         assert "v0: GetView" in payload["query"]
         assert "v1: GetView" in payload["query"]
 
+    def test_batched_get_view_rejects_unassociated_graphql_errors(self) -> None:
+        """A request-level GraphQL failure cannot masquerade as a clean partial response."""
+        api = SystemairAPI.__new__(SystemairAPI)
+        api.headers = {"Authorization": "Bearer redacted"}
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = {
+            "data": {"v0": {"children": []}},
+            "errors": [{"message": "Gateway failed", "path": []}],
+        }
+        response.raise_for_status.return_value = None
+
+        with (
+            patch("custom_components.systemair.systemair_api.api.systemair_api.requests.post", return_value=response),
+            self.assertRaises(APIError),  # noqa: PT027 -- suite intentionally uses unittest
+        ):
+            api.fetch_device_views("device", ("/home",))
+
     def test_batched_get_view_wraps_http_failures_as_api_errors(self) -> None:
         """Transport failures stay inside the bundled API exception hierarchy."""
         api = SystemairAPI.__new__(SystemairAPI)
@@ -368,6 +386,37 @@ class HomeSolutionViewsTest(unittest.TestCase):
 
         assert catalog.routes == ("/unit_information",)
         assert api.calls == [("/unit_information",)]
+
+    def test_catalog_tracks_every_route_owning_a_duplicate_register(self) -> None:
+        """Post-write readback can refresh every snapshot containing one data item."""
+
+        class FakeAPI:
+            @staticmethod
+            def fetch_device_views(_device_id: str, routes: tuple[str, ...]) -> HomeSolutionViewsResponse:
+                return HomeSolutionViewsResponse(
+                    views={
+                        route: {
+                            "children": [
+                                {
+                                    "properties": {
+                                        "enabled": True,
+                                        "dataItem": {"id": 1, "value": 10, "readOnly": False},
+                                    }
+                                }
+                            ]
+                        }
+                        for route in routes
+                    },
+                    errors={},
+                )
+
+        catalog = importlib.import_module("custom_components.systemair.homesolution_views").HomeSolutionViewCatalog(
+            seed_routes=("/home", "/home/changeMode")
+        )
+
+        catalog.discover(FakeAPI(), "device")
+
+        assert catalog.routes_for_register(1) == ("/home", "/home/changeMode")
 
 
 if __name__ == "__main__":

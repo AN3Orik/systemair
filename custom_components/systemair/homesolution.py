@@ -296,9 +296,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
     async def _refresh_after_write(self, register_ids: tuple[int, ...]) -> None:
         """Refresh and merge the views containing changed data items."""
         routes = tuple(
-            dict.fromkeys(
-                route for register_id in register_ids if (route := self._view_catalog.route_for_register(register_id)) is not None
-            )
+            dict.fromkeys(route for register_id in register_ids for route in self._view_catalog.routes_for_register(register_id))
         )
         if not routes:
             return
@@ -341,8 +339,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                 raise SystemairApiClientError(msg)
             await self._refresh_after_write((capability,))
         except AuthenticationError as err:
-            msg = f"HomeSolution authentication failed while writing register {register}: {err}"
-            raise SystemairApiClientError(msg) from err
+            self._raise_authentication_failure(err)
         except SystemairError as err:
             msg = f"HomeSolution write to register {register} failed: {err}"
             raise SystemairApiClientError(msg) from err
@@ -383,8 +380,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
                 raise SystemairApiClientError(msg)
             await self._refresh_after_write((low_capability, high_capability))
         except AuthenticationError as err:
-            msg = f"HomeSolution authentication failed during 32-bit write to register {address_1based}: {err}"
-            raise SystemairApiClientError(msg) from err
+            self._raise_authentication_failure(err)
         except SystemairError as err:
             msg = f"HomeSolution 32-bit write to register {address_1based} failed: {err}"
             raise SystemairApiClientError(msg) from err

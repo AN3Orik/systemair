@@ -233,6 +233,8 @@ def _raw_register_value(unit: VentilationUnit, register: ModbusParameter) -> Any
             continue
         if register_id in unit.registers:
             return unit.registers[register_id]
+    if register.register - 1 in unit.modbus_register_ids:
+        return unit.get_raw_modbus_register(register.register)
     if (value := unit.get_raw_modbus_register(register.register)) is not None:
         return value
     if exact_register_id is not None and exact_register_id in unit.registers:
@@ -259,8 +261,10 @@ def _decode_register_value(unit: VentilationUnit, register: ModbusParameter, raw
         except (TypeError, ValueError):
             return None
 
-    if register.sig == IntegerType.INT and value > (1 << 15) - 1:
-        value -= 1 << 16
+    if register.sig == IntegerType.INT:
+        bit_width = 32 if register.combine_with_32_bit is not None else 16
+        if value >= 1 << (bit_width - 1):
+            value -= 1 << bit_width
     return value / (register.scale_factor or 1)
 
 

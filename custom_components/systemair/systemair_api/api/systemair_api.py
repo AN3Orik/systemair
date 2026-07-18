@@ -256,10 +256,17 @@ class SystemairAPI:
         response_data = result.get("data") or {}
         views = {route: response_data.get(alias) for alias, route in alias_to_route.items()}
         errors: dict[str, str] = {}
+        unassociated_errors: list[str] = []
         for error in result.get("errors", []):
             path = error.get("path") or []
+            error_message = error.get("message", "Unknown API error")
             if path and (route := alias_to_route.get(str(path[0]))) is not None:
-                errors[route] = error.get("message", "Unknown API error")
+                errors[route] = error_message
+            else:
+                unassociated_errors.append(error_message)
+
+        if unassociated_errors:
+            raise APIError(message=unassociated_errors[0], response_data=result)
 
         return HomeSolutionViewsResponse(views=views, errors=errors)
 

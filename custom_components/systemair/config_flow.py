@@ -333,7 +333,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _validate_homesolution_reauth(self, user_input: dict[str, Any], device_id: str | None) -> None:
         """Verify refreshed credentials still expose the configured cloud device."""
         devices = await self._get_homesolution_devices(user_input)
-        if not any((device.get("identifier") or device.get("id")) == device_id for device in devices):
+        if device_id is None or not any(device.get("identifier") == device_id or device.get("id") == device_id for device in devices):
             msg = "Configured HomeSolution device is not available for this account"
             raise SystemairApiClientCommunicationError(msg)
 
@@ -612,7 +612,7 @@ class SystemairVSRConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             except ValueError as exception:
                 reason = str(exception)
-                errors["base"] = reason if reason in {"invalid_auth", "cannot_connect"} else "unknown"
+                errors["base"] = reason if reason in {"invalid_auth", "cannot_connect", "no_devices_found"} else "unknown"
             else:
                 self.hass.config_entries.async_update_entry(
                     entry,

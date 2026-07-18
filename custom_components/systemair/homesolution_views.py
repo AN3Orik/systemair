@@ -117,7 +117,7 @@ class HomeSolutionViewCatalog:
     _routes: list[str] = field(default_factory=list, init=False)
     _route_capabilities: dict[str, _HomeSolutionViewCapabilities] = field(default_factory=dict, init=False)
     _values: dict[int, Any] = field(default_factory=dict, init=False)
-    _register_routes: dict[int, str] = field(default_factory=dict, init=False)
+    _register_routes: dict[int, list[str]] = field(default_factory=dict, init=False)
     _writable_registers: set[int] = field(default_factory=set, init=False)
     _modbus_register_ids: dict[int, int] = field(default_factory=dict, init=False)
 
@@ -128,7 +128,12 @@ class HomeSolutionViewCatalog:
 
     def route_for_register(self, register_id: int) -> str | None:
         """Return the first view which exposed a register."""
-        return self._register_routes.get(register_id)
+        routes = self._register_routes.get(register_id)
+        return routes[0] if routes else None
+
+    def routes_for_register(self, register_id: int) -> tuple[str, ...]:
+        """Return every view which can contribute a register snapshot."""
+        return tuple(self._register_routes.get(register_id, ()))
 
     def is_register_writable(self, register_id: int) -> bool:
         """Return whether a discovered data item explicitly permits writes."""
@@ -231,7 +236,7 @@ class HomeSolutionViewCatalog:
             self._values.update(capabilities.values)
             self._writable_registers.update(capabilities.writable_registers)
             for register_id in capabilities.register_ids:
-                self._register_routes.setdefault(register_id, route)
+                self._register_routes.setdefault(register_id, []).append(route)
             for modbus_register, register_id in capabilities.modbus_register_ids.items():
                 self._modbus_register_ids.setdefault(modbus_register, register_id)
 
