@@ -14,6 +14,10 @@ from custom_components.systemair.systemair_api.utils.constants import WEBSOCKET_
 
 _LOGGER = logging.getLogger(__name__)
 
+WEBSOCKET_RECONNECT_DELAY = 5
+WEBSOCKET_PING_INTERVAL = 30
+WEBSOCKET_PING_TIMEOUT = 10
+
 
 class SystemairWebSocket:
     """
@@ -23,17 +27,24 @@ class SystemairWebSocket:
     and processes incoming messages through a callback function.
     """
 
-    def __init__(self, access_token: str, on_message_callback: Callable[[dict[str, Any]], None]) -> None:
+    def __init__(
+        self,
+        access_token: str,
+        on_message_callback: Callable[[dict[str, Any]], None],
+        on_connected_callback: Callable[[], None] | None = None,
+    ) -> None:
         """
         Initialize the WebSocket client.
 
         Args:
             access_token: A valid JWT access token from authentication
             on_message_callback: Callback function that will be called with message data
+            on_connected_callback: Callback invoked after initial connection and reconnect
 
         """
         self.access_token: str = access_token
         self.on_message_callback: Callable[[dict[str, Any]], None] = on_message_callback
+        self.on_connected_callback = on_connected_callback
         self.ws: WebSocketApp | None = None
         self.thread: threading.Thread | None = None
 
@@ -87,6 +98,14 @@ class SystemairWebSocket:
         """
         # Connection established notification is useful for debugging
         _LOGGER.info("WebSocket connection opened")
+        if self.on_connected_callback is not None:
+            self.on_connected_callback()
+
+    def on_reconnect(self, _ws: WebSocket) -> None:
+        """Notify the client after websocket-client restores the stream."""
+        _LOGGER.info("WebSocket connection restored")
+        if self.on_connected_callback is not None:
+            self.on_connected_callback()
 
     def connect(self) -> None:
         """
@@ -104,11 +123,20 @@ class SystemairWebSocket:
                 "Origin: https://homesolutions.systemair.com",
             ],
             on_open=self.on_open,
+            on_reconnect=self.on_reconnect,
             on_message=self.on_message,
             on_error=self.on_error,
             on_close=self.on_close,
         )
-        self.thread = threading.Thread(target=self.ws.run_forever, kwargs={"sslopt": {"cert_reqs": ssl.CERT_NONE}})
+        self.thread = threading.Thread(
+            target=self.ws.run_forever,
+            kwargs={
+                "sslopt": {"cert_reqs": ssl.CERT_NONE},
+                "reconnect": WEBSOCKET_RECONNECT_DELAY,
+                "ping_interval": WEBSOCKET_PING_INTERVAL,
+                "ping_timeout": WEBSOCKET_PING_TIMEOUT,
+            },
+        )
         self.thread.daemon = True
         self.thread.start()
 

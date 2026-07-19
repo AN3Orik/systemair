@@ -106,16 +106,15 @@ class SystemairHomeSolutionClient(SystemairClientBase):
 
         # Setup WebSocket - allow it to fail gracefully
         try:
-            self.websocket = SystemairWebSocket(access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message)
+            self.websocket = SystemairWebSocket(
+                access_token=self.authenticator.access_token,
+                on_message_callback=self._handle_ws_message,
+                on_connected_callback=self._request_device_status_from_stream,
+            )
             await asyncio.to_thread(self.websocket.connect)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to connect WebSocket for device %s: %s. Real-time updates will be unavailable.", self.device_id, e)
             self.websocket = None
-        else:
-            try:
-                await asyncio.to_thread(self.api.broadcast_device_statuses, [self.device_id])
-            except Exception as e:  # noqa: BLE001
-                _LOGGER.warning("Failed to request initial HomeSolution status for device %s: %s", self.device_id, e)
 
     async def stop(self) -> None:
         """Stop the client."""
@@ -160,16 +159,22 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             self.websocket = None
 
         try:
-            self.websocket = SystemairWebSocket(access_token=self.authenticator.access_token, on_message_callback=self._handle_ws_message)
+            self.websocket = SystemairWebSocket(
+                access_token=self.authenticator.access_token,
+                on_message_callback=self._handle_ws_message,
+                on_connected_callback=self._request_device_status_from_stream,
+            )
             await asyncio.to_thread(self.websocket.connect)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
             self.websocket = None
-        else:
-            try:
-                await asyncio.to_thread(self.api.broadcast_device_statuses, [self.device_id])
-            except Exception as e:  # noqa: BLE001
-                _LOGGER.warning("Failed to request HomeSolution status after WebSocket reconnect for device %s: %s", self.device_id, e)
+
+    def _request_device_status_from_stream(self) -> None:
+        """Request a fresh status snapshot after the stream is connected."""
+        try:
+            self.api.broadcast_device_statuses([self.device_id])
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.warning("Failed to request HomeSolution status for device %s after stream connection: %s", self.device_id, e)
 
     async def _prepare_api_request(self, *, force: bool = False) -> None:
         """Refresh the HTTP token and dependent WebSocket when necessary."""

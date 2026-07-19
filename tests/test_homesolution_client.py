@@ -14,6 +14,7 @@ from custom_components.systemair.coordinator import SystemairDataUpdateCoordinat
 from custom_components.systemair.homesolution import AUTH_FAILURE_THRESHOLD, SystemairHomeSolutionClient
 from custom_components.systemair.homesolution_views import HomeSolutionRefreshResult
 from custom_components.systemair.modbus import parameter_map
+from custom_components.systemair.systemair_api.api.websocket_client import SystemairWebSocket
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
 from custom_components.systemair.systemair_api.utils.exceptions import APIError, AuthenticationError, RateLimitError
 from custom_components.systemair.systemair_api.utils.register_constants import RegisterConstants
@@ -157,6 +158,39 @@ class AlwaysWritableCatalog(FakeCatalog):
 class HomeSolutionClientTest(unittest.TestCase):
     """The cloud client polls all views independently of WebSocket state."""
 
+    def test_websocket_worker_uses_heartbeat_and_automatic_reconnect(self) -> None:
+        """A dead streaming connection is detected and reopened by websocket-client."""
+        stream = SystemairWebSocket("token", Mock())
+        fake_app = Mock()
+        fake_thread = Mock()
+
+        with (
+            patch("custom_components.systemair.systemair_api.api.websocket_client.WebSocketApp", return_value=fake_app),
+            patch(
+                "custom_components.systemair.systemair_api.api.websocket_client.threading.Thread", return_value=fake_thread
+            ) as thread_cls,
+        ):
+            stream.connect()
+
+        run_options = thread_cls.call_args.kwargs["kwargs"]
+        assert run_options.get("reconnect") == 5
+        assert run_options.get("ping_interval") == 30
+        assert run_options.get("ping_timeout") == 10
+        fake_thread.start.assert_called_once_with()
+
+    def test_websocket_notifies_after_initial_and_reconnected_stream(self) -> None:
+        """Every established stream triggers a fresh device status request."""
+        connected = Mock()
+        stream = SystemairWebSocket("token", Mock())
+        stream.on_connected_callback = connected
+        reconnect_handler = getattr(stream, "on_reconnect", None)
+
+        assert reconnect_handler is not None
+        stream.on_open(Mock())
+        reconnect_handler(Mock())
+
+        assert connected.call_count == 2
+
     def test_coordinator_calls_homesolution_through_the_shared_client_contract(self) -> None:
         """HomeSolution accepts the alarm options passed to every Systemair client."""
         client = SystemairHomeSolutionClient("user", "password", "device")
@@ -247,7 +281,7 @@ class HomeSolutionClientTest(unittest.TestCase):
         assert client.available is True
 
     def test_start_discovers_views_before_websocket(self) -> None:
-        """Initial startup populates capabilities without relying on WebSocket."""
+        """A connected stream requests a fresh status snapshot without racing startup."""
         client = SystemairHomeSolutionClient("user", "password", "device")
         client.authenticator = FakeAuthenticator()
         client._view_catalog = FakeCatalog()
@@ -257,13 +291,17 @@ class HomeSolutionClientTest(unittest.TestCase):
 
         with (
             patch("custom_components.systemair.homesolution.SystemairAPI", return_value=fake_api),
-            patch("custom_components.systemair.homesolution.SystemairWebSocket", return_value=fake_websocket),
+            patch("custom_components.systemair.homesolution.SystemairWebSocket", return_value=fake_websocket) as websocket_cls,
         ):
             asyncio.run(client.start())
 
         assert client._view_catalog.calls == 1
         assert client.unit.registers[29] == 3
         assert client.available is True
+        connected_callback = websocket_cls.call_args.kwargs.get("on_connected_callback")
+        assert connected_callback is not None
+        fake_api.broadcast_device_statuses.assert_not_called()
+        connected_callback()
         fake_api.broadcast_device_statuses.assert_called_once_with(["device"])
 
     def test_websocket_failure_does_not_override_successful_http_poll(self) -> None:
