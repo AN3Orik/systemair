@@ -49,6 +49,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
         self._poll_lock = asyncio.Lock()
         self._rate_limit_until = 0.0
         self._capabilities_discovered = False
+        self._stream_connected = False
 
     def _merge_refresh_values(self, values: dict[int, Any]) -> None:
         """Replace discovered address metadata and cloud capability values."""
@@ -106,18 +107,16 @@ class SystemairHomeSolutionClient(SystemairClientBase):
 
         # Setup WebSocket - allow it to fail gracefully
         try:
-            self.websocket = SystemairWebSocket(
-                access_token=self.authenticator.access_token,
-                on_message_callback=self._handle_ws_message,
-                on_connected_callback=self._request_device_status_from_stream,
-            )
+            self.websocket = self._create_websocket()
             await asyncio.to_thread(self.websocket.connect)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to connect WebSocket for device %s: %s. Real-time updates will be unavailable.", self.device_id, e)
+            self._handle_stream_connection_state(connected=False)
             self.websocket = None
 
     async def stop(self) -> None:
         """Stop the client."""
+        self._handle_stream_connection_state(connected=False)
         if self.websocket is not None:
             try:
                 await asyncio.to_thread(self.websocket.disconnect)
@@ -151,6 +150,7 @@ class SystemairHomeSolutionClient(SystemairClientBase):
 
     async def _reconnect_websocket(self) -> None:
         """Disconnect any existing WebSocket and reopen with the current token."""
+        self._handle_stream_connection_state(connected=False)
         if self.websocket is not None:
             try:
                 await asyncio.to_thread(self.websocket.disconnect)
@@ -159,15 +159,33 @@ class SystemairHomeSolutionClient(SystemairClientBase):
             self.websocket = None
 
         try:
-            self.websocket = SystemairWebSocket(
-                access_token=self.authenticator.access_token,
-                on_message_callback=self._handle_ws_message,
-                on_connected_callback=self._request_device_status_from_stream,
-            )
+            self.websocket = self._create_websocket()
             await asyncio.to_thread(self.websocket.connect)
         except Exception as e:  # noqa: BLE001
             _LOGGER.warning("Failed to reconnect WebSocket: %s. Real-time updates will be unavailable.", e)
+            self._handle_stream_connection_state(connected=False)
             self.websocket = None
+
+    def _create_websocket(self) -> SystemairWebSocket:
+        """Create a stream with consistent lifecycle callbacks."""
+        return SystemairWebSocket(
+            access_token=self.authenticator.access_token,
+            on_message_callback=self._handle_ws_message,
+            on_connected_callback=self._request_device_status_from_stream,
+            on_connection_state_callback=self._handle_stream_connection_state,
+        )
+
+    def _handle_stream_connection_state(self, connected: bool) -> None:  # noqa: FBT001 -- callback contract
+        """Discard status-only airflow when the realtime stream is unavailable."""
+        self._stream_connected = connected
+        if connected or self.unit is None or self.unit.airflow is None:
+            return
+
+        self.unit.airflow = None
+        if self.update_callback:
+            # The coordinator callback crosses from the WebSocket worker thread
+            # to Home Assistant's event loop with call_soon_threadsafe().
+            self.update_callback()
 
     def _request_device_status_from_stream(self) -> None:
         """Request a fresh status snapshot after the stream is connected."""
@@ -300,6 +318,8 @@ class SystemairHomeSolutionClient(SystemairClientBase):
     def supports_register(self, register: ModbusParameter) -> bool:
         """Return whether the discovered cloud schema can supply a SAVE register."""
         if register.short == "REG_FILTER_REMAINING_TIME_L":
+            return True
+        if register.short == "REG_SPEED_INDICATION_APP" and self.unit is not None and self.unit.airflow is not None:
             return True
         if self._view_catalog.register_id_for_modbus(register.register) is not None:
             return True

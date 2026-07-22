@@ -32,6 +32,7 @@ class SystemairWebSocket:
         access_token: str,
         on_message_callback: Callable[[dict[str, Any]], None],
         on_connected_callback: Callable[[], None] | None = None,
+        on_connection_state_callback: Callable[[bool], None] | None = None,
     ) -> None:
         """
         Initialize the WebSocket client.
@@ -40,11 +41,13 @@ class SystemairWebSocket:
             access_token: A valid JWT access token from authentication
             on_message_callback: Callback function that will be called with message data
             on_connected_callback: Callback invoked after initial connection and reconnect
+            on_connection_state_callback: Callback invoked when stream connectivity changes
 
         """
         self.access_token: str = access_token
         self.on_message_callback: Callable[[dict[str, Any]], None] = on_message_callback
         self.on_connected_callback = on_connected_callback
+        self.on_connection_state_callback = on_connection_state_callback
         self.ws: WebSocketApp | None = None
         self.thread: threading.Thread | None = None
 
@@ -71,6 +74,7 @@ class SystemairWebSocket:
         """
         # Log to stdout for diagnostic purposes, but keep it minimal
         _LOGGER.error("WebSocket error: %s", error)
+        self._notify_connection_state(connected=False)
 
     def on_close(self, _ws: WebSocket, close_status_code: Any, _close_msg: Any) -> None:
         """
@@ -87,6 +91,7 @@ class SystemairWebSocket:
             _LOGGER.info("WebSocket connection closed with code: %s", close_status_code)
         else:
             _LOGGER.info("WebSocket connection closed")
+        self._notify_connection_state(connected=False)
 
     def on_open(self, _ws: WebSocket) -> None:
         """
@@ -98,14 +103,21 @@ class SystemairWebSocket:
         """
         # Connection established notification is useful for debugging
         _LOGGER.info("WebSocket connection opened")
+        self._notify_connection_state(connected=True)
         if self.on_connected_callback is not None:
             self.on_connected_callback()
 
     def on_reconnect(self, _ws: WebSocket) -> None:
         """Notify the client after websocket-client restores the stream."""
         _LOGGER.info("WebSocket connection restored")
+        self._notify_connection_state(connected=True)
         if self.on_connected_callback is not None:
             self.on_connected_callback()
+
+    def _notify_connection_state(self, *, connected: bool) -> None:
+        """Publish stream connectivity when the caller requested it."""
+        if self.on_connection_state_callback is not None:
+            self.on_connection_state_callback(connected)
 
     def connect(self) -> None:
         """

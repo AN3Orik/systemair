@@ -141,7 +141,6 @@ class VentilationUnit:
 
         register_map = {
             RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI: ("user_mode", value),
-            RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: ("airflow", value),
             RegisterConstants.REG_MAINBOARD_USERMODE_REMAINING_TIME_L: ("user_mode_remaining_time", value),
             RegisterConstants.REG_MAINBOARD_USERMODE_HOLIDAY_TIME: ("user_mode_times", ("holiday", value)),
             RegisterConstants.REG_MAINBOARD_USERMODE_AWAY_TIME: ("user_mode_times", ("away", value)),

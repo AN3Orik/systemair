@@ -884,6 +884,15 @@ parameters_list = [
         max_value=None,
     ),
     ModbusParameter(
+        register=1242,
+        sig=IntegerType.UINT,
+        reg_type=RegisterType.Input,
+        short="REG_SPEED_INDICATION_APP",
+        description="Actual airflow level: 0: Off, 1: Minimum, 2: Low, 3: Normal, 4: High, 5: Maximum, 6: Demand, 7: External",
+        min_value=0,
+        max_value=7,
+    ),
+    ModbusParameter(
         register=1251,
         sig=IntegerType.UINT,
         reg_type=RegisterType.Holding,

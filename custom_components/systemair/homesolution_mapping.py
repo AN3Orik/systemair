@@ -13,6 +13,7 @@ from .const import (
     PRESET_MODE_REFRESH,
     PRESET_MODE_VACUUM_CLEANER,
 )
+from .fan_state import coerce_fan_level
 from .modbus import IntegerType, ModbusParameter, parameters_list
 from .systemair_api.models.ventilation_unit import VentilationUnit
 from .systemair_api.utils.constants import UserModes
@@ -34,7 +35,7 @@ HOMESOLUTION_STATUS_FALLBACKS = frozenset(
         "REG_SENSOR_MODBUS_CO2",
         "REG_USERMODE_MODE",
         "REG_USERMODE_HMI_CHANGE_REQUEST",
-        "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",
+        "REG_SPEED_INDICATION_APP",
         "REG_FUNCTION_ACTIVE_HEATER",
         "REG_FUNCTION_ACTIVE_COOLER",
         "REG_OUTPUT_TRIAC",
@@ -48,10 +49,8 @@ HOMESOLUTION_STATUS_FALLBACKS = frozenset(
 HOMESOLUTION_REGISTER_ALIASES: dict[str, tuple[str, ...]] = {
     "REG_USERMODE_MODE": ("REG_MAINBOARD_USERMODE_MODE_HMI",),
     "REG_USERMODE_HMI_CHANGE_REQUEST": ("REG_MAINBOARD_USERMODE_HMI_CHANGE_REQUEST",),
-    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": (
-        "REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",
-        "REG_MAINBOARD_SPEED_INDICATION_APP",
-    ),
+    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": ("REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF",),
+    "REG_SPEED_INDICATION_APP": ("REG_MAINBOARD_SPEED_INDICATION_APP",),
     "REG_ECO_FUNCTION_ACTIVE": ("REG_MAINBOARD_FUNCTION_ACTIVE_ECO_MODE",),
     "REG_OUTPUT_Y1_ANALOG": ("REG_MAINBOARD_OUTPUT_AO1",),
     "REG_OUTPUT_Y1_DIGITAL": ("REG_MAINBOARD_OUTPUT_DO1",),
@@ -115,47 +114,6 @@ def _get_preset_mode_value(unit: VentilationUnit) -> int | None:
         return None
     preset = USER_MODE_TO_PRESET.get(unit.user_mode)
     return PRESET_MODE_TO_VALUE_MAP.get(preset)
-
-
-def _get_fan_mode_value(unit: VentilationUnit) -> int | None:
-    """Get fan mode value.
-
-    In climate.py:
-    FAN_OFF: 0
-    FAN_LOW: 2
-    FAN_MEDIUM: 3
-    FAN_HIGH: 4
-    """  # noqa: D213
-    if unit.airflow is None:
-        return None
-    return _speed_indication_to_save_fan_mode(unit.airflow)
-
-
-def _speed_indication_to_save_fan_mode(value: Any) -> int | None:
-    """Map HomeSolution readback levels to the fan modes exposed by Climate."""
-    try:
-        level = int(value)
-    except (TypeError, ValueError):
-        return None
-    if level == 0:
-        return 0
-    if level <= 2:  # noqa: PLR2004 -- Minimum and Low collapse to Low
-        return 2
-    if level == 3:  # noqa: PLR2004
-        return 3
-    return 4
-
-
-def _resolve_fan_mode_register(unit: VentilationUnit) -> float | None:
-    """Resolve the selected fan mode, falling back to delayed actual airflow."""
-    if (action := unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)) is not None:
-        value = _speed_indication_to_save_fan_mode(action)
-        return None if value is None else float(value)
-    if (readback := unit.registers.get(RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP)) is not None:
-        value = _speed_indication_to_save_fan_mode(readback)
-        return None if value is None else float(value)
-    value = _get_fan_mode_value(unit)
-    return None if value is None else float(value)
 
 
 def _get_active_alarms_count(unit: VentilationUnit) -> int | None:
@@ -295,8 +253,8 @@ def _decode_register_value(unit: VentilationUnit, register: ModbusParameter, raw
 
 def resolve_homesolution_value(unit: VentilationUnit, register: ModbusParameter) -> float | bool | None:
     """Resolve a SAVE register from cloud capabilities or a summary fallback."""
-    if register.short == "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF":
-        return _resolve_fan_mode_register(unit)
+    if register.short == "REG_SPEED_INDICATION_APP" and (level := coerce_fan_level(unit.airflow)) is not None:
+        return float(level)
 
     if (raw_value := _raw_register_value(unit, register)) is not None:
         decoded = _decode_register_value(unit, register, raw_value)
@@ -348,9 +306,9 @@ HOMESOLUTION_MAPPING = {
     # Operation Mode & Fan
     "REG_USERMODE_MODE": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_USERMODE_MODE_HMI, unit.user_mode),
     "REG_USERMODE_HMI_CHANGE_REQUEST": _get_preset_mode_value,
+    "REG_SPEED_INDICATION_APP": lambda unit: coerce_fan_level(unit.airflow),
     "REG_OUTPUT_SAF": lambda _unit: None,
     "REG_OUTPUT_EAF": lambda _unit: None,
-    "REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF": _get_fan_mode_value,
     "REG_FAN_MANUAL_STOP_ALLOWED": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_FAN_MANUAL_STOP_ALLOWED),
     "REG_SENSOR_RPM_SAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RPM_SAF),
     "REG_SENSOR_RPM_EAF": lambda unit: unit.registers.get(RegisterConstants.REG_MAINBOARD_SENSOR_RPM_EAF),

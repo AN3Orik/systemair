@@ -97,7 +97,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.register_modbus_parameters(register)
 
         if self.data is None:
-            return None if self._is_homesolution else 0
+            return None
 
         if self._is_homesolution:
             # HomeSolution Logic
@@ -111,7 +111,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         value = self.data.get(str(register.register - 1))
 
         if value is None:
-            return 0
+            return None
         if register.boolean:
             return value != 0
         value = int(value)
@@ -119,7 +119,7 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if register.combine_with_32_bit:
             high = self.data.get(str(register.combine_with_32_bit - 1))
             if high is None:
-                return 0
+                return None
             value += int(high) << 16
 
         if register.sig == IntegerType.INT and value > (1 << 15) - 1:

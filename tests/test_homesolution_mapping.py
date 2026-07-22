@@ -12,6 +12,7 @@ from custom_components.systemair import entity as entity_module
 from custom_components.systemair import homesolution_mapping
 from custom_components.systemair.coordinator import SystemairDataUpdateCoordinator
 from custom_components.systemair.entity import SystemairEntity
+from custom_components.systemair.homesolution import SystemairHomeSolutionClient
 from custom_components.systemair.modbus import IntegerType, parameter_map
 from custom_components.systemair.systemair_api.models.ventilation_unit import VentilationUnit
 from custom_components.systemair.systemair_api.utils.register_constants import RegisterConstants
@@ -110,8 +111,8 @@ class HomeSolutionMappingTest(unittest.TestCase):
 
         assert homesolution_mapping.resolve_homesolution_value(unit, parameter_map["REG_FILTER_REMAINING_TIME_L"]) == 2_592_000
 
-    def test_cloud_fan_setpoint_precedes_delayed_speed_indication(self) -> None:
-        """The selected fan mode updates immediately while actual airflow catches up."""
+    def test_cloud_fan_command_is_not_replaced_by_delayed_actual_airflow(self) -> None:
+        """The selected manual command remains separate from actual fan readback."""
         resolver = homesolution_mapping.resolve_homesolution_value
         register = parameter_map["REG_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF"]
         unit = VentilationUnit("device", "Unit")
@@ -126,10 +127,39 @@ class HomeSolutionMappingTest(unittest.TestCase):
 
         unit.registers.pop(RegisterConstants.REG_MAINBOARD_USERMODE_MANUAL_AIRFLOW_LEVEL_SAF)
         unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] = 1
-        assert resolver(unit, register) == 2.0
+        assert resolver(unit, register) is None
 
         unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] = 0
-        assert resolver(unit, register) == 0.0
+        assert resolver(unit, register) is None
+
+    def test_actual_fan_readback_prefers_websocket_then_uses_mainboard_fallback(self) -> None:
+        """Realtime status wins over stale GetView data and remains its fallback."""
+        actual = parameter_map["REG_SPEED_INDICATION_APP"]
+        unit = VentilationUnit("device", "Unit")
+        unit.update_from_websocket({"properties": {"airflow": 2}})
+        unit.replace_register_values({RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: 1})
+
+        assert unit.airflow == 2
+        assert homesolution_mapping.resolve_homesolution_value(unit, actual) == 2.0
+
+        raw_only_unit = VentilationUnit("raw-device", "Raw Unit")
+        raw_only_unit.replace_register_values({RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: 1})
+
+        assert raw_only_unit.airflow is None
+        assert homesolution_mapping.resolve_homesolution_value(raw_only_unit, actual) == 1.0
+
+    def test_websocket_actual_airflow_is_a_supported_cloud_capability(self) -> None:
+        """Status airflow keeps actual readback supported without a GetView register."""
+        actual = parameter_map["REG_SPEED_INDICATION_APP"]
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.unit = VentilationUnit("device", "Unit")
+        client.unit.airflow = 2
+        client._view_catalog = SimpleNamespace(
+            register_id_for_modbus=lambda _register: None,
+            route_for_register=lambda _register: None,
+        )
+
+        assert client.supports_register(actual) is True
 
     def test_write_candidates_use_visible_home_controls_and_translate_values(self) -> None:
         """Cloud actions are enabled by their visible writable readback controls."""

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from custom_components.systemair.api import SystemairAuthExpiredError
 from custom_components.systemair.coordinator import SystemairDataUpdateCoordinator
 from custom_components.systemair.homesolution import AUTH_FAILURE_THRESHOLD, SystemairHomeSolutionClient
+from custom_components.systemair.homesolution_mapping import resolve_homesolution_value
 from custom_components.systemair.homesolution_views import HomeSolutionRefreshResult
 from custom_components.systemair.modbus import parameter_map
 from custom_components.systemair.systemair_api.api.websocket_client import SystemairWebSocket
@@ -181,15 +182,73 @@ class HomeSolutionClientTest(unittest.TestCase):
     def test_websocket_notifies_after_initial_and_reconnected_stream(self) -> None:
         """Every established stream triggers a fresh device status request."""
         connected = Mock()
+        connection_state = Mock()
         stream = SystemairWebSocket("token", Mock())
         stream.on_connected_callback = connected
+        stream.on_connection_state_callback = connection_state
         reconnect_handler = getattr(stream, "on_reconnect", None)
 
         assert reconnect_handler is not None
         stream.on_open(Mock())
         reconnect_handler(Mock())
+        with self.assertLogs("custom_components.systemair.systemair_api.api.websocket_client", level="ERROR"):
+            stream.on_error(Mock(), OSError("stream failed"))
+        stream.on_close(Mock(), 1006, "connection lost")
 
         assert connected.call_count == 2
+        assert [state.args[0] for state in connection_state.call_args_list] == [True, True, False, False]
+
+    def test_stream_disconnect_discards_status_airflow_and_publishes_raw_fallback(self) -> None:
+        """Disconnecting a stale stream immediately restores polled actual airflow."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.unit = VentilationUnit("device", "Unit")
+        client.unit.replace_register_values({RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: 1})
+        client.update_callback = Mock()
+        state_handler = getattr(client, "_handle_stream_connection_state", None)
+
+        assert state_handler is not None
+        connected = True
+        disconnected = False
+        state_handler(connected)
+        client._handle_ws_message({"identifier": "device", "properties": {"airflow": 4}})
+        assert resolve_homesolution_value(client.unit, parameter_map["REG_SPEED_INDICATION_APP"]) == 4.0
+
+        client.update_callback.reset_mock()
+        state_handler(disconnected)
+
+        assert client.unit.airflow is None
+        assert client.unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] == 1
+        assert resolve_homesolution_value(client.unit, parameter_map["REG_SPEED_INDICATION_APP"]) == 1.0
+        client.update_callback.assert_called_once_with()
+
+    def test_failed_websocket_reconnect_discards_status_airflow_and_publishes_raw_fallback(self) -> None:
+        """A failed token reconnect cannot leave stale stream airflow authoritative."""
+        client = SystemairHomeSolutionClient("user", "password", "device")
+        client.authenticator = FakeAuthenticator()
+        client.unit = VentilationUnit("device", "Unit")
+        client.unit.replace_register_values({RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP: 1})
+        client.update_callback = Mock()
+        client._handle_stream_connection_state(connected=True)
+        client._handle_ws_message({"identifier": "device", "properties": {"airflow": 4}})
+        client.update_callback.reset_mock()
+
+        old_websocket = Mock()
+        old_websocket.disconnect.side_effect = OSError("disconnect failed")
+        replacement_websocket = Mock()
+        replacement_websocket.connect.side_effect = OSError("connect failed")
+        client.websocket = old_websocket
+
+        with (
+            patch("custom_components.systemair.homesolution.SystemairWebSocket", return_value=replacement_websocket),
+            self.assertLogs("custom_components.systemair.homesolution", level="WARNING"),
+        ):
+            asyncio.run(client._reconnect_websocket())
+
+        assert client.unit.airflow is None
+        assert client.unit.registers[RegisterConstants.REG_MAINBOARD_SPEED_INDICATION_APP] == 1
+        assert resolve_homesolution_value(client.unit, parameter_map["REG_SPEED_INDICATION_APP"]) == 1.0
+        client.update_callback.assert_called_once_with()
+        assert client.websocket is None
 
     def test_coordinator_calls_homesolution_through_the_shared_client_contract(self) -> None:
         """HomeSolution accepts the alarm options passed to every Systemair client."""
@@ -299,7 +358,9 @@ class HomeSolutionClientTest(unittest.TestCase):
         assert client.unit.registers[29] == 3
         assert client.available is True
         connected_callback = websocket_cls.call_args.kwargs.get("on_connected_callback")
+        connection_state_callback = websocket_cls.call_args.kwargs.get("on_connection_state_callback")
         assert connected_callback is not None
+        assert connection_state_callback is not None
         fake_api.broadcast_device_statuses.assert_not_called()
         connected_callback()
         fake_api.broadcast_device_statuses.assert_called_once_with(["device"])
