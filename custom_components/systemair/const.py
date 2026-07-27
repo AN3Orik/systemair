@@ -1,5 +1,6 @@
 """Constants for Systemair."""
 
+import re
 from collections.abc import Mapping
 from logging import Logger, getLogger
 from typing import Any
@@ -127,9 +128,26 @@ MODEL_SPECS = {
 }
 
 
+def normalise_model_name(model: str) -> str:
+    """
+    Normalise a model name so catalogue keys and device-reported strings compare equal.
+
+    Units report their own model through "MB Model" (e.g. "SAVE VTR 300 R"), which
+    differs from the catalogue keys used by MODEL_SPECS (e.g. "VTR 300/B R"): the
+    device string carries a "SAVE " prefix and omits the "/B" designation.
+    """
+    normalised = re.sub(r"^SAVE\s+", "", model.strip().upper())
+    return re.sub(r"\s+", " ", normalised.replace("/B", "")).strip()
+
+
+_NORMALISED_MODEL_SPECS: dict[str, dict[str, Any]] = {normalise_model_name(key): value for key, value in MODEL_SPECS.items()}
+
+
 def resolve_model_specs(model: str, model_aliases: Mapping[str, str]) -> dict[str, Any] | None:
     """Resolve model specifications through device-profile aliases."""
-    return MODEL_SPECS.get(model) or MODEL_SPECS.get(model_aliases.get(model, ""))
+    return (
+        MODEL_SPECS.get(model) or MODEL_SPECS.get(model_aliases.get(model, "")) or _NORMALISED_MODEL_SPECS.get(normalise_model_name(model))
+    )
 
 
 # Constants from the old integration
