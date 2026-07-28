@@ -5,7 +5,7 @@
 [![GitHub License](https://img.shields.io/github/license/AN3Orik/systemair?style=for-the-badge)](https://github.com/AN3Orik/systemair/blob/main/LICENSE)
 [![TIP](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg?style=for-the-badge)](https://dalink.to/an3orik)
 
-This Home Assistant integration allows you to monitor and control **Systemair SAVE** and **Legacy Residential / D24810** ventilation units through supported device profiles. It supports communication via **Modbus TCP**, **Modbus Serial (RS485)**, and **Web API**.
+This Home Assistant integration allows you to monitor and control **Systemair SAVE** and **Legacy Residential / D24810** ventilation units through supported device profiles. It supports communication via **Modbus TCP**, **Modbus Serial (RS485)**, **Web API**, and experimental **HomeSolution / SAVE CONNECT Cloud** access.
 
 This integration was tested with SAVE VSR 300 and VSR 500 models. Legacy Residential / D24810 support is available through Modbus only.
 
@@ -16,10 +16,11 @@ This integration was tested with SAVE VSR 300 and VSR 500 models. Legacy Residen
 ## Features
 
 *   **Device Profiles:** Support for `SAVE` and `Legacy Residential / D24810` register maps. Modbus connections can auto-detect the profile or use manual selection.
-*   **Multiple Connection Methods:** Support for three different connection types:
+*   **Multiple Connection Methods:** Support for four different connection types:
     *   **Modbus TCP** - SAVE and Legacy Residential / D24810
     *   **Modbus Serial (RS485)** - SAVE and Legacy Residential / D24810
     *   **Web API (HTTP)** - SAVE via Systemair SAVECONNECT 2.0 IAM module
+    *   **HomeSolution / SAVE CONNECT (Cloud)** - SAVE via a Systemair cloud account (**Experimental**)
 *   **Climate Control:** Full control over HVAC modes (Off, Fan Only, Heat, Cool), target temperature, fan speed, and preset modes (Auto, Manual, Away, Holiday, etc.).
 *   **Calculated Power Consumption:** Monitor the estimated power usage of the supply fan, extract fan, and the total power consumption of the unit, including the re-heater. Essential for energy tracking in Home Assistant's Energy Dashboard.
 *   **Advanced Configuration Controls:** Directly configure key operational parameters from Home Assistant, including:
@@ -57,6 +58,15 @@ This integration was tested with SAVE VSR 300 and VSR 500 models. Legacy Residen
 3.  You need to know the IP address of the IAM module. You can typically find this in your router's client list.
 4.  The IAM module's web interface should be accessible via HTTP.
 5.  If the IAM web interface is password-protected, you need to know the device password.
+
+### Connection Method 4: HomeSolution / SAVE CONNECT (Cloud) — Experimental
+
+1.  A Systemair SAVE ventilation unit linked to your HomeSolution / SAVE CONNECT account.
+2.  The email address and password used to sign in to that account.
+3.  The ventilation unit and Home Assistant instance must both have internet access.
+4.  At least one ventilation unit must be visible in the SAVE CONNECT application or HomeSolution web portal.
+
+> **⚠️ Experimental:** This connection uses Systemair's cloud services and depends on their availability. The entities and controls exposed to Home Assistant may vary according to the capabilities reported for your ventilation unit.
 
 ## Installation
 
@@ -116,6 +126,19 @@ Configure connection to SAVECONNECT 2.0 IAM module:
 *   **Ventilation Unit Model (Optional):** You can manually select your unit model, or leave it empty to auto-detect from the device.
 
 Web API uses the `SAVE` profile only.
+
+### Option D: HomeSolution / SAVE CONNECT (Cloud) — Experimental
+
+Configure the integration using the same account as the SAVE CONNECT application or HomeSolution web portal. A local IP address is not required:
+
+*   **Email:** The email address associated with your HomeSolution / SAVE CONNECT account.
+*   **Password:** The password for your HomeSolution / SAVE CONNECT account.
+*   **Ventilation Unit:** Select the unit to add from the devices available in your account.
+*   **Ventilation Unit Model:** Select the model of the chosen unit. This is used for airflow and power consumption calculations.
+
+HomeSolution uses the `SAVE` profile only.
+
+> **⚠️ Experimental:** This connection depends on Systemair's cloud service and requires internet access. Entity availability may differ from local Modbus or Web API connections because only capabilities exposed by the cloud service can be used.
 
 ---
 
