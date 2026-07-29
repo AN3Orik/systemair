@@ -22,7 +22,8 @@ This integration was tested with SAVE VSR 300 and VSR 500 models. Legacy Residen
     *   **Web API (HTTP)** - SAVE via Systemair SAVECONNECT 2.0 IAM module
     *   **HomeSolution / SAVE CONNECT (Cloud)** - SAVE via a Systemair cloud account (**Experimental**)
 *   **Climate Control:** Full control over HVAC modes (Off, Fan Only, Heat, Cool), target temperature, fan speed, and preset modes (Auto, Manual, Away, Holiday, etc.).
-*   **Calculated Power Consumption:** Monitor the estimated power usage of the supply fan, extract fan, and the total power consumption of the unit, including the re-heater. Essential for energy tracking in Home Assistant's Energy Dashboard.
+*   **Estimated Airflow:** Calculates supply and extract airflow from the live fan output percentage and the selected model's maximum airflow, or from a user-configured installed maximum airflow.
+*   **Estimated Power and Energy:** Calculates supply fan, extract fan, and total power consumption from live unit outputs and model specifications, then integrates those power estimates over time for energy tracking in Home Assistant.
 *   **Advanced Configuration Controls:** Directly configure key operational parameters from Home Assistant, including:
     *   Temperature Control Mode (Supply air, Room air, etc.)
     *   Fan Regulation Unit (Manual %, RPM, Pressure, etc.)
@@ -152,7 +153,9 @@ After installation, configure these options via **Settings > Devices & Services 
 
 | Option | Range | Default | Description |
 |--------|-------|---------|-------------|
-| Ventilation Unit Model | — | VSR 300 | Select your unit model; used for SAVE power calculations |
+| Ventilation Unit Model | — | VSR 300 | Select your unit model; used for SAVE airflow, power, and energy calculations |
+| Installed Maximum Supply Airflow | 1-5000 m³/h | Model specification | Optional measured or commissioned maximum supply airflow used to improve the airflow estimate |
+| Installed Maximum Extract Airflow | 1-5000 m³/h | Model specification | Optional measured or commissioned maximum extract airflow used to improve the airflow estimate |
 | Update Interval | 10-120s | 60s | How often to poll the device for updates |
 | Max Registers per Web API Request | 30-125 | 70 | Registers per request (Web API only) |
 | Enable Alarm History | True/False | False | Enable fetching alarm history (increases Modbus load) |
@@ -180,10 +183,14 @@ The primary entity for controlling the unit.
 *   **Humidity:** Extract Air Relative Humidity.
 *   **Fan Speeds:** Supply & Extract Air Fan RPM, Supply & Extract Air Fan Regulated Speed (%).
 *   **Heater:** Heater Output Value (%).
-*   **Power & Energy:** Supply Fan, Extract Fan, and Total Power/Energy consumption
+*   **Estimated Airflow:** Supply and Extract Airflow (m³/h), calculated as the live fan output percentage multiplied by the selected model's maximum airflow. A separately measured or commissioned maximum can be configured for each side.
+*   **Estimated Power:** Supply Fan, Extract Fan, and Total Power (W), calculated from the selected model's fan and heater specifications together with live fan and heater output values.
+*   **Estimated Energy:** Supply Fan, Extract Fan, and Total Energy (kWh), accumulated by integrating the corresponding estimated power values over time.
 *   **Diagnostics:** Indoor Air Quality, Active Demand Controller, Defrosting State.
 *   **Filter:** Filter Remaining Time (in seconds).
 *   **Alarms:** Individual sensors for each possible alarm (e.g., Frost Protection, Filter Alarm) showing its current state.
+
+> **⚠️ Estimated values:** Airflow, power, and energy sensors are calculated estimates; they are not direct readings from airflow instruments or electricity meters. Their accuracy depends on the selected model, available live output signals, model specifications, duct-system resistance, filter condition, and installation balancing. Configure measured maximum supply and extract airflow values when available to improve airflow estimates. Do not use these sensors for billing, safety-critical decisions, or professional system commissioning.
 
 #### Binary Sensors
 
