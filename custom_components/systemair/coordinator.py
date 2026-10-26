@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +37,9 @@ if TYPE_CHECKING:
     from .data import SystemairConfigEntry
     from .modbus import ModbusParameter
 
+TRANSIENT_FAILURE_THRESHOLD = 3
+POST_WRITE_REFRESH_COOLDOWN = 2.0
+
 
 class InvalidBooleanValueError(HomeAssistantError):
     """Exception raised for invalid boolean values."""
@@ -66,6 +71,11 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.client.set_update_callback(self.async_set_updated_data_from_ws)
 
         self.modbus_parameters: list[ModbusParameter] = []
+        self._consecutive_update_failures = 0
+        self._last_write_refresh: float | None = None
+        self._write_since_last_refresh = False
+        self._trailing_refresh_handle: asyncio.TimerHandle | None = None
+        self._trailing_refresh_task: asyncio.Task[None] | None = None
 
         super().__init__(
             hass=hass,
@@ -161,12 +171,51 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return whether the active transport can write both halves of a value."""
         return not self._is_homesolution or self.client.can_write_registers_32bit(register)
 
+    def _schedule_trailing_write_refresh(self, delay: float) -> None:
+        """Schedule a single coalesced refresh after the write cooldown expires."""
+        if getattr(self, "_trailing_refresh_handle", None) is not None:
+            return
+
+        loop = asyncio.get_running_loop()
+
+        def _trigger_refresh() -> None:
+            self._trailing_refresh_handle = None
+            task_coro = self._async_run_trailing_write_refresh()
+            hass = getattr(self, "hass", None)
+            if hass is not None and hasattr(hass, "async_create_task"):
+                self._trailing_refresh_task = hass.async_create_task(task_coro)
+            else:
+                self._trailing_refresh_task = loop.create_task(task_coro)
+
+        self._trailing_refresh_handle = loop.call_later(delay, _trigger_refresh)
+
+    async def _async_run_trailing_write_refresh(self) -> None:
+        """Execute a trailing refresh queued during the write cooldown."""
+        if not getattr(self, "_write_since_last_refresh", False):
+            return
+        self._write_since_last_refresh = False
+        self._last_write_refresh = time.monotonic()
+        await self.async_request_refresh()
+
     async def async_refresh_after_write(self) -> None:
         """Publish cloud readback locally or refresh the active local transport."""
         if self._is_homesolution:
             if self.client.unit is not None:
                 self.async_set_updated_data(self.client.unit)
             return
+        now = time.monotonic()
+        last_refresh = getattr(self, "_last_write_refresh", None)
+        if last_refresh is not None and (now - last_refresh) < POST_WRITE_REFRESH_COOLDOWN:
+            if getattr(self, "_write_since_last_refresh", False):
+                remaining = max(0.0, POST_WRITE_REFRESH_COOLDOWN - (now - last_refresh))
+                self._schedule_trailing_write_refresh(remaining)
+            return
+        existing_handle = getattr(self, "_trailing_refresh_handle", None)
+        if existing_handle is not None:
+            existing_handle.cancel()
+            self._trailing_refresh_handle = None
+        self._write_since_last_refresh = False
+        self._last_write_refresh = now
         await self.async_request_refresh()
 
     async def set_modbus_data(self, register: ModbusParameter, value: Any) -> None:
@@ -184,6 +233,11 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             await self.client.write_register(register.register, value_to_write)
+            if isinstance(getattr(self, "data", None), dict):
+                self.data[str(register.register - 1)] = value_to_write
+                if hasattr(self, "async_update_listeners"):
+                    self.async_update_listeners()
+            self._write_since_last_refresh = True
             await self.async_refresh_after_write()
         except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError) as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
@@ -195,6 +249,12 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set the data for a 32-bit Modbus register."""
         try:
             await self.client.write_registers_32bit(register.register, value)
+            if isinstance(getattr(self, "data", None), dict):
+                self.data[str(register.register - 1)] = value & 0xFFFF
+                self.data[str(register.register)] = (value >> 16) & 0xFFFF
+                if hasattr(self, "async_update_listeners"):
+                    self.async_update_listeners()
+            self._write_since_last_refresh = True
             await self.async_refresh_after_write()
         except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError) as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
@@ -237,21 +297,51 @@ class SystemairDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             enable_alarm_details = self.config_entry.options.get(CONF_ENABLE_ALARM_DETAILS, DEFAULT_ENABLE_ALARM_DETAILS)
             enable_alarm_history = self.config_entry.options.get(CONF_ENABLE_ALARM_HISTORY, DEFAULT_ENABLE_ALARM_HISTORY)
-            if self._is_webapi:
-                if self.modbus_parameters:
-                    return await self.client.async_get_data(self.modbus_parameters)
-                return await self.client.get_all_data(
+            if self._is_webapi and self.modbus_parameters:
+                new_data = await self.client.async_get_data(self.modbus_parameters)
+            else:
+                # For HomeSolution, get_all_data returns the VentilationUnit object
+                # For others, it returns a dict of registers
+                new_data = await self.client.get_all_data(
                     enable_alarm_details=enable_alarm_details,
                     enable_alarm_history=enable_alarm_history,
                 )
-
-            # For HomeSolution, get_all_data returns the VentilationUnit object
-            # For others, it returns a dict of registers
-            return await self.client.get_all_data(
-                enable_alarm_details=enable_alarm_details,
-                enable_alarm_history=enable_alarm_history,
-            )
         except (SystemairAuthError, SystemairAuthExpiredError, SystemairAuthRequiredError) as exception:
             raise ConfigEntryAuthFailed(str(exception)) from exception
         except (ModbusConnectionError, SystemairApiClientError) as exception:
+            failures = getattr(self, "_consecutive_update_failures", 0) + 1
+            self._consecutive_update_failures = failures
+            current_data = getattr(self, "data", None)
+            if current_data is not None and failures <= TRANSIENT_FAILURE_THRESHOLD:
+                LOGGER.warning(
+                    "Transient error fetching %s data (%d/%d); keeping cached state: %s",
+                    DOMAIN,
+                    failures,
+                    TRANSIENT_FAILURE_THRESHOLD,
+                    exception,
+                )
+                return current_data
             raise UpdateFailed(exception) from exception
+
+        current_data = getattr(self, "data", None)
+        merged_data = {**current_data, **new_data} if isinstance(current_data, dict) and isinstance(new_data, dict) else new_data
+        partial_error = getattr(self.client, "last_read_error", None) if self._is_webapi else None
+
+        if partial_error is not None:
+            failures = getattr(self, "_consecutive_update_failures", 0) + 1
+            self._consecutive_update_failures = failures
+            if current_data is not None and failures <= TRANSIENT_FAILURE_THRESHOLD:
+                LOGGER.warning(
+                    "Partial error fetching %s data (%d/%d); keeping cached state for failed chunks: %s",
+                    DOMAIN,
+                    failures,
+                    TRANSIENT_FAILURE_THRESHOLD,
+                    partial_error,
+                )
+                return merged_data
+            if isinstance(merged_data, dict):
+                self.data = merged_data
+            raise UpdateFailed(partial_error) from partial_error
+
+        self._consecutive_update_failures = 0
+        return merged_data

@@ -160,7 +160,7 @@ After installation, configure these options via **Settings > Devices & Services 
 | Max Registers per Web API Request | 30-125 | 70 | Registers per request (Web API only) |
 | Enable Alarm History | True/False | False | Enable fetching alarm history (increases Modbus load) |
 
-> **⚠️ Note:** Some units (e.g., VTR 300) may experience Modbus communication hangs with low update intervals. If you experience connectivity issues, increase the update interval. Lowering below default is at your own risk.
+> **⚠️ Note:** Some units (e.g., VTR 300) may experience Modbus communication hangs or `MB DISCONNECTED` warnings with low update intervals or large Web API request batches. If you experience connectivity issues, increase the update interval (e.g., 60s) or lower **Max Registers per Web API Request** (e.g., to 40). Lowering the update interval below default is at your own risk.
 
 ## Entities Provided
 

@@ -10,7 +10,6 @@
   "issue_tracker": "https://github.com/AN3Orik/systemair/issues",
   "requirements": [
     "pymodbus>=3.11.2,<3.14",
-    "aiohttp",
     "async-timeout",
     "beautifulsoup4",
     "websocket-client"
