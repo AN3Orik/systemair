@@ -376,6 +376,9 @@
             "demand_active_controller": {
                 "name": "Demand Active Controller"
             },
+            "efficiency_temperature_sensor_eft": {
+                "name": "Efficiency temperature sensor (EFT)"
+            },
             "auto_mode_source": {
                 "name": "Auto Mode Source",
                 "state": {

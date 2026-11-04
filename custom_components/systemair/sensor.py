@@ -264,6 +264,13 @@ ENTITY_DESCRIPTIONS = (
         registry=parameter_map["REG_SENSOR_PDM_EAT_VALUE"],
     ),
     SystemairSensorEntityDescription(
+        key="efficiency_temperature_sensor_eft",
+        translation_key="efficiency_temperature_sensor_eft",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        registry=parameter_map["REG_SENSOR_EFT"],
+    ),
+    SystemairSensorEntityDescription(
         key="supply_air_temperature",
         translation_key="supply_air_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
